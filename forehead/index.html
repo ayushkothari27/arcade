@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#1A1A2E">
+  <title>Forehead</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,700;1,9..144,400&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:      #1A1A2E;
+      --orange:  #C8572E;
+      --yellow:  #C99A30;
+      --green:   #3A8F72;
+      --indigo:  #6366F1;
+      --pink:    #B85C8A;
+      --muted:   #9CA3AF;
+      --surface: rgba(255,255,255,0.05);
+      --border:  rgba(255,255,255,0.09);
+      --text:    #F9FAFB;
+    }
+
+    html, body { height: 100%; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Space Grotesk', sans-serif;
+      overflow: hidden;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .blob { position: fixed; border-radius: 50%; filter: blur(90px); opacity: 0.14; pointer-events: none; }
+    .blob-1 { width: 460px; height: 460px; background: var(--yellow); top: -160px; right: -120px; }
+    .blob-2 { width: 340px; height: 340px; background: var(--green);  bottom: -100px; left: -100px; }
+
+    .screen {
+      position: fixed; inset: 0;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: max(20px, env(safe-area-inset-top, 0px)) 20px max(20px, env(safe-area-inset-bottom, 0px));
+      text-align: center;
+    }
+    .screen.on { display: flex; }
+
+    .back {
+      position: fixed;
+      top: max(14px, env(safe-area-inset-top, 0px));
+      left: 16px;
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 0.8rem;
+    }
+    .back:hover { color: var(--text); }
+
+    /* ── Home ─────────────────────────── */
+    .logo {
+      font-family: 'Fraunces', Georgia, serif;
+      font-size: clamp(2.4rem, 10vw, 3.4rem);
+      letter-spacing: -0.02em;
+      line-height: 1;
+    }
+    .logo em { font-style: italic; font-weight: 400; color: var(--yellow); }
+    .tag { color: var(--muted); margin: 0.6rem 0 1.6rem; font-size: 0.95rem; }
+
+    .how {
+      display: grid;
+      gap: 0.6rem;
+      text-align: left;
+      width: min(360px, 100%);
+      margin-bottom: 1.5rem;
+      font-size: 0.88rem;
+    }
+    .how div { display: flex; gap: 0.7rem; align-items: center; }
+    .how .ic {
+      width: 34px; height: 34px; flex-shrink: 0;
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+    }
+
+    .chips { display: inline-flex; gap: 4px; padding: 4px; background: var(--surface); border: 1px solid var(--border); border-radius: 999px; margin-bottom: 1.3rem; }
+    .chip {
+      border: none; background: transparent; color: var(--muted);
+      font: inherit; font-weight: 600; font-size: 0.85rem;
+      padding: 0.45rem 1rem; border-radius: 999px; cursor: pointer;
+    }
+    .chip.on { background: rgba(255,255,255,0.1); color: var(--text); }
+
+    .btn {
+      padding: 0.9rem 2.6rem;
+      border-radius: 999px;
+      border: none;
+      background: var(--orange);
+      color: var(--text);
+      font: inherit; font-weight: 700; font-size: 1.05rem;
+      cursor: pointer;
+      transition: transform 0.12s ease, filter 0.12s ease;
+    }
+    .btn:hover { filter: brightness(1.1); transform: translateY(-1px); }
+    .link {
+      margin-top: 1rem;
+      background: none; border: none;
+      color: var(--muted); font: inherit; font-size: 0.78rem;
+      text-decoration: underline; cursor: pointer;
+    }
+    .note { margin-top: 0.5rem; font-size: 0.72rem; color: rgba(156,163,175,0.75); max-width: 340px; }
+
+    /* ── Countdown & play ─────────────── */
+    #countdown .big {
+      font-family: 'Fraunces', Georgia, serif;
+      font-size: clamp(5rem, 30vmin, 12rem);
+      line-height: 1;
+    }
+    #countdown .small { color: var(--muted); margin-top: 1rem; font-size: 1rem; }
+
+    #play { padding: 0; touch-action: none; }
+    .top {
+      position: absolute;
+      top: max(12px, env(safe-area-inset-top, 0px));
+      left: 0; right: 0;
+      display: flex; justify-content: space-between;
+      padding: 0 22px;
+      font-weight: 700;
+      font-size: clamp(1rem, 4.5vmin, 1.6rem);
+      pointer-events: none;
+    }
+    .top .time.low { color: var(--orange); }
+    #name {
+      font-family: 'Fraunces', Georgia, serif;
+      font-weight: 700;
+      line-height: 1.05;
+      letter-spacing: -0.01em;
+      padding: 0 4vw;
+      pointer-events: none;
+      word-break: normal;
+      overflow-wrap: anywhere;
+    }
+    .zones {
+      position: absolute;
+      bottom: max(10px, env(safe-area-inset-bottom, 0px));
+      left: 0; right: 0;
+      display: flex; justify-content: space-between;
+      padding: 0 22px;
+      font-size: 0.72rem;
+      color: rgba(156,163,175,0.7);
+      pointer-events: none;
+    }
+
+    #flash {
+      position: fixed; inset: 0;
+      display: none;
+      align-items: center; justify-content: center;
+      font-family: 'Fraunces', Georgia, serif;
+      font-size: clamp(3rem, 18vmin, 8rem);
+      font-weight: 700;
+      z-index: 5;
+    }
+    #flash.got  { display: flex; background: var(--green); }
+    #flash.pass { display: flex; background: var(--orange); }
+
+    /* ── Results ──────────────────────── */
+    #results { justify-content: flex-start; overflow-y: auto; padding-top: max(56px, env(safe-area-inset-top, 0px)); }
+    .score {
+      font-family: 'Fraunces', Georgia, serif;
+      font-size: clamp(3.5rem, 16vw, 5rem);
+      line-height: 1;
+    }
+    .score-label { color: var(--muted); margin: 0.4rem 0 1.4rem; }
+    .list {
+      width: min(380px, 100%);
+      display: grid;
+      gap: 0.4rem;
+      margin-bottom: 1.5rem;
+      text-align: left;
+    }
+    .row {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 0.6rem 0.9rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      font-size: 0.92rem;
+    }
+    .row.got  span:last-child { color: var(--green);  font-weight: 700; }
+    .row.pass span:last-child { color: var(--orange); font-weight: 700; }
+    .row.pass span:first-child { color: var(--muted); }
+  </style>
+</head>
+<body>
+  <div class="blob blob-1"></div>
+  <div class="blob blob-2"></div>
+
+  <!-- Home -->
+  <section class="screen on" id="home">
+    <a class="back" href="../index.html">← vibe-coding</a>
+    <h1 class="logo">Fore<em>head</em></h1>
+    <p class="tag">Football legends edition</p>
+    <div class="how">
+      <div><span class="ic">📱</span><span>Hold the phone to your forehead, screen facing your friends.</span></div>
+      <div><span class="ic">🗣️</span><span>They describe the player. No saying the name!</span></div>
+      <div><span class="ic">✅</span><span><b>Tilt down</b> when you get it (or tap the right side).</span></div>
+      <div><span class="ic">⏭️</span><span><b>Tilt up</b> to pass (or tap the left side).</span></div>
+    </div>
+    <div class="chips" id="lengths">
+      <button class="chip" data-s="60">60s</button>
+      <button class="chip" data-s="90">90s</button>
+      <button class="chip" data-s="120">120s</button>
+    </div>
+    <button class="btn" id="start">Start</button>
+    <button class="link" id="flip">Tilt feels backwards? Flip it</button>
+    <p class="note">On a computer: → or space = got it, ← = pass.</p>
+  </section>
+
+  <!-- Countdown -->
+  <section class="screen" id="countdown">
+    <div class="big" id="count">3</div>
+    <div class="small">Phone on your forehead</div>
+  </section>
+
+  <!-- Play -->
+  <section class="screen" id="play">
+    <div class="top"><span id="got">0</span><span class="time" id="time">60</span></div>
+    <div id="name"></div>
+    <div class="zones"><span>◀ tap to pass</span><span>tap when you got it ▶</span></div>
+  </section>
+  <div id="flash"></div>
+
+  <!-- Results -->
+  <section class="screen" id="results">
+    <div class="score" id="final">0</div>
+    <div class="score-label" id="final-label">players guessed</div>
+    <div class="list" id="list"></div>
+    <button class="btn" id="again">Play again</button>
+    <button class="link" id="home-btn">Home</button>
+  </section>
+
+<script>
+// ─────────────────────────────────────────────────
+//  DECK: famous men's footballers, current and retired
+// ─────────────────────────────────────────────────
+const PLAYERS = [
+  // Legends
+  'Pelé', 'Diego Maradona', 'Johan Cruyff', 'Franz Beckenbauer', 'Alfredo Di Stéfano', 'Ferenc Puskás',
+  'Eusébio', 'Garrincha', 'Bobby Charlton', 'George Best', 'Lev Yashin', 'Gerd Müller', 'Michel Platini',
+  'Marco van Basten', 'Ruud Gullit', 'Frank Rijkaard', 'Zico', 'Sócrates', 'Mario Kempes', 'Bobby Moore',
+  'Kenny Dalglish', 'Dino Zoff', 'Franco Baresi', 'Lothar Matthäus', 'Karl-Heinz Rummenigge', 'Kevin Keegan',
+  'Ian Rush', 'Daniel Passarella',
+  // 90s & 2000s
+  'Zinedine Zidane', 'Ronaldo Nazário', 'Ronaldinho', 'Romário', 'Rivaldo', 'Roberto Carlos', 'Cafu', 'Kaká',
+  'Paolo Maldini', 'Roberto Baggio', 'Alessandro Del Piero', 'Francesco Totti', 'Andrea Pirlo',
+  'Fabio Cannavaro', 'Alessandro Nesta', 'Gianluigi Buffon', 'Thierry Henry', 'Patrick Vieira',
+  'Lilian Thuram', 'Marcel Desailly', 'Didier Deschamps', 'Claude Makélélé', 'Robert Pires', 'Eric Cantona',
+  'Dennis Bergkamp', 'Clarence Seedorf', 'Edwin van der Sar', 'Peter Schmeichel', 'Oliver Kahn',
+  'Michael Ballack', 'Jürgen Klinsmann', 'Luís Figo', 'Rui Costa', 'Raúl', 'Iker Casillas', 'Carles Puyol',
+  'Xavi', 'Andrés Iniesta', 'Hristo Stoichkov', 'Gheorghe Hagi', 'Davor Šuker', 'Pavel Nedvěd',
+  'Andriy Shevchenko', 'Gabriel Batistuta', 'Hernán Crespo', 'Javier Zanetti', 'Juan Román Riquelme',
+  'Carlos Valderrama', 'Hugo Sánchez', 'George Weah', 'Jay-Jay Okocha', 'Roger Milla', "Samuel Eto'o",
+  'Didier Drogba', 'Michael Essien', 'Hidetoshi Nakata', 'Park Ji-sung', 'Alan Shearer', 'Gary Lineker',
+  'David Beckham', 'Ryan Giggs', 'Paul Scholes', 'Steven Gerrard', 'Frank Lampard', 'Wayne Rooney',
+  'Rio Ferdinand', 'John Terry', 'Ashley Cole', 'Jamie Carragher', 'Petr Čech', 'Michael Owen',
+  'Ruud van Nistelrooy', 'Nicolas Anelka', 'Christian Vieri', 'Filippo Inzaghi',
+  // 2010s & today
+  'Lionel Messi', 'Cristiano Ronaldo', 'Neymar', 'Kylian Mbappé', 'Erling Haaland', 'Mohamed Salah',
+  'Kevin De Bruyne', 'Luka Modrić', 'Toni Kroos', 'Sergio Ramos', 'Gerard Piqué', 'Sergio Busquets',
+  'Xabi Alonso', 'David Silva', 'Fernando Torres', 'David Villa', 'Cesc Fàbregas', 'Manuel Neuer',
+  'Thomas Müller', 'Philipp Lahm', 'Bastian Schweinsteiger', 'Miroslav Klose', 'Mesut Özil', 'Arjen Robben',
+  'Wesley Sneijder', 'Robin van Persie', 'Virgil van Dijk', 'Zlatan Ibrahimović', 'Robert Lewandowski',
+  'Karim Benzema', 'Antoine Griezmann', "N'Golo Kanté", 'Paul Pogba', 'Luis Suárez', 'Edinson Cavani',
+  'Sergio Agüero', 'Ángel Di María', 'Carlos Tevez', 'James Rodríguez', 'Radamel Falcao', 'Eden Hazard',
+  'Thibaut Courtois', 'Gareth Bale', 'Harry Kane', 'Son Heung-min', 'Sadio Mané', 'Riyad Mahrez',
+  'Yaya Touré', 'Thiago Silva', 'Marcelo', 'Dani Alves', 'Casemiro', 'Bruno Fernandes', 'Marcus Rashford',
+  'Raheem Sterling', 'Jude Bellingham', 'Vinícius Júnior', 'Lamine Yamal', 'Rodri', 'Pedri', 'Bukayo Saka',
+  'Phil Foden', 'Florian Wirtz', 'Jamal Musiala', 'Declan Rice', 'Federico Valverde', 'Lautaro Martínez',
+  'Julián Álvarez', 'Emiliano Martínez', 'Victor Osimhen', 'Ousmane Dembélé', 'Achraf Hakimi',
+];
+
+// ─────────────────────────────────────────────────
+//  SETTINGS (remembered per device; storage is optional)
+// ─────────────────────────────────────────────────
+function load(key, fallback) { try { const v = localStorage.getItem(key); return v === null ? fallback : JSON.parse(v); } catch { return fallback; } }
+function save(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); } catch {} }
+
+let roundLength = load('forehead-length', 60);
+let tiltFlipped = load('forehead-flip', false);
+
+// ─────────────────────────────────────────────────
+//  SCREENS
+// ─────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+function show(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.toggle('on', s.id === id));
+}
+
+function renderChips() {
+  document.querySelectorAll('.chip').forEach(c => c.classList.toggle('on', +c.dataset.s === roundLength));
+  $('flip').textContent = tiltFlipped ? 'Tilt flipped · tap to undo' : 'Tilt feels backwards? Flip it';
+}
+document.querySelectorAll('.chip').forEach(c => c.addEventListener('click', () => {
+  roundLength = +c.dataset.s; save('forehead-length', roundLength); renderChips();
+}));
+$('flip').addEventListener('click', () => { tiltFlipped = !tiltFlipped; save('forehead-flip', tiltFlipped); renderChips(); });
+renderChips();
+
+// ─────────────────────────────────────────────────
+//  AUDIO + HAPTICS
+// ─────────────────────────────────────────────────
+let AC = null;
+function ensureAudio() {
+  if (AC) return;
+  try { AC = new (window.AudioContext || window.webkitAudioContext)(); } catch {}
+}
+function tone(freq, dur, delay = 0, type = 'sine', vol = 0.2) {
+  if (!AC) return;
+  const t = AC.currentTime + delay;
+  const o = AC.createOscillator(), g = AC.createGain();
+  o.type = type; o.frequency.value = freq;
+  g.gain.setValueAtTime(vol, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  o.connect(g); g.connect(AC.destination);
+  o.start(t); o.stop(t + dur + 0.02);
+}
+const buzz = ms => { try { navigator.vibrate?.(ms); } catch {} };
+const sfx = {
+  tick:  () => tone(880, 0.08, 0, 'triangle', 0.15),
+  go:    () => tone(1320, 0.25, 0, 'triangle', 0.2),
+  got:   () => { tone(660, 0.1); tone(990, 0.18, 0.08); buzz(60); },
+  pass:  () => { tone(300, 0.2, 0, 'triangle'); buzz([30, 40, 30]); },
+  end:   () => { [784, 659, 523].forEach((f, i) => tone(f, 0.3, i * 0.15, 'triangle')); buzz(300); },
+};
+
+// ─────────────────────────────────────────────────
+//  DECK
+// ─────────────────────────────────────────────────
+// Shuffled, skipping names shown in recent games so rounds feel fresh.
+function buildDeck() {
+  const recent = new Set(load('forehead-recent', []));
+  const fresh = PLAYERS.filter(p => !recent.has(p));
+  const pool = fresh.length >= 30 ? fresh : PLAYERS.slice();
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  return pool;
+}
+function rememberShown(names) {
+  const recent = load('forehead-recent', []);
+  save('forehead-recent', [...names, ...recent.filter(n => !names.includes(n))].slice(0, 100));
+}
+
+// ─────────────────────────────────────────────────
+//  ROUND
+// ─────────────────────────────────────────────────
+const R = { deck: [], current: null, results: [], endsAt: 0, timer: null, locked: false, playing: false };
+let wakeLock = null;
+
+async function startRound() {
+  ensureAudio();
+  await enableMotion();
+  goFullscreen();
+  try { wakeLock = await navigator.wakeLock?.request('screen'); } catch {}
+
+  R.deck = buildDeck();
+  R.results = [];
+  R.locked = false;
+
+  show('countdown');
+  for (let n = 3; n > 0; n--) {
+    $('count').textContent = n;
+    sfx.tick();
+    await sleep(900);
+  }
+  sfx.go();
+  show('play');
+  R.playing = true;
+  R.endsAt = Date.now() + roundLength * 1000;
+  $('got').textContent = '0';
+  nextName();
+  tickClock();
+  R.timer = setInterval(tickClock, 200);
+}
+
+function nextName() {
+  if (!R.deck.length) R.deck = buildDeck();
+  R.current = R.deck.pop();
+  const el = $('name');
+  el.textContent = R.current;
+  fitName();
+}
+
+/** Makes the name as big as the screen allows. */
+function fitName() {
+  const el = $('name');
+  const maxW = window.innerWidth * 0.92, maxH = window.innerHeight * 0.62;
+  let lo = 16, hi = 260;
+  while (hi - lo > 2) {
+    const mid = (lo + hi) / 2;
+    el.style.fontSize = mid + 'px';
+    if (el.scrollWidth <= maxW && el.scrollHeight <= maxH) lo = mid; else hi = mid;
+  }
+  el.style.fontSize = lo + 'px';
+}
+window.addEventListener('resize', () => { if (R.playing) fitName(); });
+
+function tickClock() {
+  const left = Math.max(0, Math.ceil((R.endsAt - Date.now()) / 1000));
+  const t = $('time');
+  if (t.textContent !== String(left) && left <= 5 && left > 0) sfx.tick();
+  t.textContent = left;
+  t.classList.toggle('low', left <= 10);
+  if (left <= 0) endRound();
+}
+
+async function answer(gotIt) {
+  if (!R.playing || R.locked) return;
+  R.locked = true;
+  R.results.push({ name: R.current, got: gotIt });
+  if (gotIt) $('got').textContent = R.results.filter(r => r.got).length;
+  gotIt ? sfx.got() : sfx.pass();
+  const flash = $('flash');
+  flash.className = gotIt ? 'got' : 'pass';
+  flash.textContent = gotIt ? 'Got it!' : 'Pass';
+  await sleep(750);
+  flash.className = '';
+  if (!R.playing) return;
+  nextName();
+  R.locked = false;
+}
+
+function endRound() {
+  if (!R.playing) return;
+  R.playing = false;
+  clearInterval(R.timer);
+  $('flash').className = '';
+  // The name on screen when time ran out counts as a pass.
+  if (R.current && !R.results.some(r => r.name === R.current)) R.results.push({ name: R.current, got: false });
+  rememberShown(R.results.map(r => r.name));
+  sfx.end();
+  try { wakeLock?.release(); } catch {}
+  wakeLock = null;
+  if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
+
+  const got = R.results.filter(r => r.got).length;
+  $('final').textContent = got;
+  $('final-label').textContent = got === 1 ? 'player guessed' : 'players guessed';
+  $('list').innerHTML = R.results.map(r =>
+    `<div class="row ${r.got ? 'got' : 'pass'}"><span>${r.name}</span><span>${r.got ? '✓' : '–'}</span></div>`
+  ).join('');
+  show('results');
+}
+
+// ─────────────────────────────────────────────────
+//  TILT
+// ─────────────────────────────────────────────────
+// Gravity along the axis coming out of the screen: about 0 while the phone is
+// upright on your forehead, strongly negative when the screen faces the floor
+// and positive when it faces the ceiling. After a tilt, the phone has to come
+// back upright before the next one counts.
+let motionReady = false, armed = true;
+
+async function enableMotion() {
+  if (motionReady || typeof DeviceMotionEvent === 'undefined') return;
+  try {
+    if (typeof DeviceMotionEvent.requestPermission === 'function') {
+      if (await DeviceMotionEvent.requestPermission() !== 'granted') return;
+    }
+    window.addEventListener('devicemotion', onMotion);
+    motionReady = true;
+  } catch {}
+}
+
+function onMotion(e) {
+  const g = e.accelerationIncludingGravity;
+  if (!g || g.z === null || !R.playing) return;
+  const z = tiltFlipped ? -g.z : g.z;
+  if (Math.abs(z) < 3.5) { armed = true; return; }
+  if (!armed || R.locked || Math.abs(z) < 6.5) return;
+  armed = false;
+  answer(z < 0);   // screen toward the floor = got it, toward the ceiling = pass
+}
+
+// ─────────────────────────────────────────────────
+//  TAPS + KEYS
+// ─────────────────────────────────────────────────
+$('play').addEventListener('pointerdown', e => {
+  answer(e.clientX > window.innerWidth / 2);
+});
+
+window.addEventListener('keydown', e => {
+  if (!R.playing) return;
+  if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); answer(true); }
+  if (e.key === 'ArrowLeft') { e.preventDefault(); answer(false); }
+  if (e.key === 'Escape') endRound();
+});
+
+$('start').addEventListener('click', startRound);
+$('again').addEventListener('click', startRound);
+$('home-btn').addEventListener('click', () => show('home'));
+
+// Back in the tab after locking the phone: the wake lock drops, so ask again.
+document.addEventListener('visibilitychange', async () => {
+  if (document.visibilityState === 'visible' && R.playing) {
+    try { wakeLock = await navigator.wakeLock?.request('screen'); } catch {}
+  }
+});
+
+// ─────────────────────────────────────────────────
+//  HELPERS
+// ─────────────────────────────────────────────────
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+/** Full screen + landscape lock where the browser allows it (Android); ignored elsewhere. */
+function goFullscreen() {
+  const el = document.documentElement;
+  const req = el.requestFullscreen || el.webkitRequestFullscreen;
+  if (!req || document.fullscreenElement) return;
+  Promise.resolve(req.call(el)).then(() => screen.orientation?.lock?.('landscape')).catch(() => {});
+}
+</script>
+</body>
+</html>

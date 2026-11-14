@@ -156,6 +156,19 @@
     }
     .mode.on { background: rgba(255,255,255,0.1); color: var(--text); }
     .hint a { color: var(--muted); }
+    .picker {
+      display: flex; align-items: center; justify-content: center; gap: 0.6rem;
+      margin: 0 0 1.1rem;
+      font-size: 0.82rem; color: var(--muted);
+    }
+    .picker button {
+      width: 30px; height: 30px; border-radius: 50%;
+      border: 1px solid var(--border); background: var(--surface);
+      color: var(--text); font: inherit; font-size: 1rem; cursor: pointer;
+    }
+    .picker button:hover { border-color: rgba(255,255,255,0.22); }
+    .picker b { color: var(--text); font-size: 1.05rem; min-width: 2ch; display: inline-block; }
+
 
     .lines { display: grid; gap: 0.35rem; margin: 0 0 1.2rem; font-size: 0.88rem; }
     .lines div { display: flex; justify-content: space-between; color: var(--muted); }
@@ -205,6 +218,7 @@ const TARGET      = 0.85;   // share of the field to claim
 const CAPTURE_MAX = 0.04;   // pens this small (or smaller) capture the sparks inside
 const FENCE_SPEED = 20;     // cells per second, per arm
 const MAX_HEARTS  = 5;
+const MAX_START   = 30;   // highest level the menu lets you jump to
 
 const C = {
   bg:     '#1A1A2E',
@@ -318,8 +332,8 @@ const solid = (x, y) => x < 0 || y < 0 || x >= G.cols || y >= G.rows || G.grid[i
 const now = () => performance.now() / 1000;
 const rand = (a, b) => a + Math.random() * (b - a);
 
-function newGame() {
-  G.level = 1; G.score = 0; G.hearts = 3;
+function newGame(level = 1) {
+  G.level = level; G.score = 0; G.hearts = 3;
   newLevel();
 }
 
@@ -624,9 +638,11 @@ function showMenu() {
       <button class="mode ${simple ? 'on' : ''}" data-mode="simple">Simple</button>
     </div>
     <div class="rules">${rules}</div>
+    ${pickerHTML()}
     <button class="btn">Play</button>
     <p class="hint">${best ? `Best <span class="best">${best.toLocaleString()}</span> · ` : ''}M to mute</p>
-  `, newGame);
+  `, () => newGame(pickedLevel));
+  wirePicker();
   card.querySelectorAll('.mode').forEach(b => b.addEventListener('click', e => {
     e.stopPropagation();
     setMode(b.dataset.mode === 'simple');
@@ -660,9 +676,24 @@ function showOver(isBest, best) {
       <div><span>${isBest ? 'New best!' : 'Best'}</span><span class="best">${best.toLocaleString()}</span></div>
     </div>
     <button class="btn">Play again</button>
-    <p class="hint"><a href="#" id="to-menu">Change mode</a></p>
-  `, newGame);
+    <p class="hint"><a href="#" id="to-menu">Change mode or level</a></p>
+  `, () => newGame(pickedLevel));
   card.querySelector('#to-menu').addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); newLevel(); showMenu(); });
+}
+
+// ─────────────────────────────────────────────────
+//  LEVEL PICKER (menu stepper; ?level=N in the URL preselects it)
+// ─────────────────────────────────────────────────
+const clampLevel = n => Math.max(1, Math.min(MAX_START, Math.floor(+n) || 1));
+let pickedLevel = clampLevel(new URLSearchParams(location.search).get('level') || 1);
+const pickerHTML = () =>
+  `<div class="picker">Start at level <button data-step="-1" aria-label="Lower level">−</button><b id="picked">${pickedLevel}</b><button data-step="1" aria-label="Higher level">+</button></div>`;
+function wirePicker() {
+  card.querySelectorAll('.picker button').forEach(b => b.addEventListener('click', e => {
+    e.stopPropagation();
+    pickedLevel = clampLevel(pickedLevel + +b.dataset.step);
+    card.querySelector('#picked').textContent = pickedLevel;
+  }));
 }
 
 // ─────────────────────────────────────────────────
