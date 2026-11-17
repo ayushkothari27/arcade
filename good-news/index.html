@@ -184,18 +184,43 @@
       else if (extra === 3) note().textContent = 'Greedy. We love it.';
     }
 
-    fetch('feed.json', { cache: 'no-cache' })
-      .then(r => r.json())
-      .then(({ items }) => {
-        if (!items?.length) throw new Error('empty');
-        // Fixed order so the daily pick is stable through the day.
-        pool = [...items].sort((a, b) => a.link < b.link ? -1 : 1);
-        idx = hash(dayKey) % pool.length;
-        show(idx, true);
-      })
-      .catch(() => {
-        slot.replaceChildren(el('p', { className: 'empty', textContent: "Couldn't load today's story. Try again in a bit." }));
-      });
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+    async function getFeed(tries = 3) {
+      for (let n = 1; ; n++) {
+        try {
+          // Cache-buster so a stale 404 from the CDN or browser can't stick.
+          const r = await fetch(`feed.json?t=${Date.now()}`, { cache: 'no-store' });
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          const { items } = await r.json();
+          if (!items?.length) throw new Error('feed is empty');
+          return items;
+        } catch (err) {
+          console.error(`Good News: load attempt ${n} failed`, err);
+          if (n >= tries) throw err;
+          await sleep(800 * n);
+        }
+      }
+    }
+
+    function load() {
+      slot.replaceChildren(el('p', { className: 'empty', textContent: 'Finding something nice…' }));
+      getFeed()
+        .then(items => {
+          // Fixed order so the daily pick is stable through the day.
+          pool = [...items].sort((a, b) => a.link < b.link ? -1 : 1);
+          idx = hash(dayKey) % pool.length;
+          show(idx, true);
+        })
+        .catch(err => {
+          slot.replaceChildren(el('div', { className: 'empty' },
+            el('p', { textContent: `Couldn't load today's story (${err.message}).` }),
+            el('div', { className: 'actions' },
+              el('button', { className: 'btn btn-ghost', type: 'button', textContent: 'Try again ↻', onclick: load }))));
+        });
+    }
+
+    load();
   </script>
 </body>
 </html>
