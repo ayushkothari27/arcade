@@ -15,3 +15,4 @@ A collection of self-contained single-file web apps, all sharing a consistent da
 | **Corral** | `corral/` | Fence-building arcade game: pen in bouncing sparks, works with touch |
 | **Desk — Todo** | `desk/todo/` | Minimal to-do list |
 | **Desk — Bookmarks** | `desk/bookmark/` | Personal bookmark manager |
+| **Good News** | `good-news/` | One uplifting story a day from r/UpliftingNews, refreshed every 6 hours by a GitHub Action |
