@@ -1,18 +1,15 @@
-# vibe-coding
+# arcade
 
-A collection of self-contained single-file web apps, all sharing a consistent dark theme and design language.
+Small browser games, each a self-contained single HTML file with a shared dark theme. Works on desktop and touch.
 
-## Apps
+Play at https://ayushkothari27.github.io/arcade/
 
-| App | Path | Description |
-|-----|------|-------------|
-| **Asteroids** | `asteroids/` | Canvas-based Asteroids game with touch controls |
-| **Flaggle** | `flaggle/` | Daily flag-guessing puzzle (Wordle-style) |
-| **Forehead** | `forehead/` | Party guessing game: phone on your forehead, friends describe the footballer, tilt to score |
-| **Focus Timer** | `pomodoro/` | Pomodoro / focus timer |
+| Game | Path | Description |
+|------|------|-------------|
 | **Shatter** | `shatter/` | Brick breaker: pop pixel-art pictures made of dots, multiply your balls, endless levels |
-| **Trip Countdown** | `trip-countdown/` | Countdown to an upcoming trip |
-| **Corral** | `corral/` | Fence-building arcade game: pen in bouncing sparks, works with touch |
-| **Desk — Todo** | `desk/todo/` | Minimal to-do list |
-| **Desk — Bookmarks** | `desk/bookmark/` | Personal bookmark manager |
-| **Good News** | `good-news/` | One uplifting story a day from r/UpliftingNews, refreshed every 6 hours by a GitHub Action |
+| **Corral** | `corral/` | Fence-building arcade game: pen in bouncing sparks |
+| **Forehead** | `forehead/` | Party guessing game: phone on your forehead, friends describe the footballer, tilt to score |
+| **Flaggle** | `flaggle/` | Daily flag-guessing puzzle (Wordle-style) |
+| **Asteroids** | `asteroids/` | Canvas-based Asteroids with touch controls |
+
+The todo and bookmarks pages moved to [desk](https://github.com/ayushkothari27/desk).

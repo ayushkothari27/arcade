@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>vibe-coding</title>
+  <title>arcade</title>
   <meta name="theme-color" content="#1A1A2E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -135,37 +135,8 @@
       color: var(--text);
     }
     .arrow { color: var(--muted); transition: transform 0.15s ease, color 0.15s ease; }
-    .tile:hover .arrow, .tool:hover .arrow { transform: translateX(3px); color: var(--text); }
+    .tile:hover .arrow { transform: translateX(3px); color: var(--text); }
 
-    /* ── Tools list ─────────────────────── */
-    .tools {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
-      gap: 10px;
-    }
-    .tool {
-      display: flex;
-      align-items: center;
-      gap: 0.85rem;
-      padding: 0.8rem 1rem;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      text-decoration: none;
-      color: var(--text);
-      transition: background 0.18s ease, border-color 0.18s ease;
-    }
-    .tool:hover, .tool:focus-visible { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.18); outline: none; }
-    .tool-icon {
-      width: 38px; height: 38px;
-      flex-shrink: 0;
-      border-radius: 10px;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 1.15rem;
-    }
-    .tool-text { flex: 1; min-width: 0; }
-    .tool-name { font-weight: 600; font-size: 0.92rem; }
-    .tool-desc { font-size: 0.76rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
     footer { margin-top: 3rem; font-size: 0.72rem; color: rgba(156,163,175,0.6); text-align: center; }
     footer a { color: inherit; }
@@ -186,7 +157,7 @@
     }
     @media (prefers-reduced-motion: reduce) {
       .blob { animation: none; }
-      .tile, .tool, .arrow { transition: none; }
+      .tile, .arrow { transition: none; }
     }
   </style>
 </head>
@@ -198,8 +169,8 @@
 
   <div class="wrap">
     <header>
-      <div class="logo">vibe<em>coding</em></div>
-      <span class="subtitle">a collection of small things</span>
+      <div class="logo"><em>arcade</em></div>
+      <span class="subtitle">small games, built for fun</span>
     </header>
 
     <!-- ═══════════════ GAMES ═══════════════ -->
@@ -310,47 +281,8 @@
       </a>
     </div>
 
-    <!-- ═══════════════ TOOLS ═══════════════ -->
-    <div class="section-head"><h2>TOOLS</h2><span>7</span></div>
-    <div class="tools">
-      <a class="tool" href="good-news/index.html">
-        <div class="tool-icon" style="background: rgba(201,154,48,0.15)">☀️</div>
-        <div class="tool-text"><div class="tool-name">Good News</div><div class="tool-desc">One uplifting story a day</div></div>
-        <span class="arrow">→</span>
-      </a>
-      <a class="tool" href="dns-lookup/index.html">
-        <div class="tool-icon" style="background: rgba(99,102,241,0.15)">🔍</div>
-        <div class="tool-text"><div class="tool-name">DNS Lookup</div><div class="tool-desc">Check DNS records for any domain</div></div>
-        <span class="arrow">→</span>
-      </a>
-      <a class="tool" href="http-toolbox/index.html">
-        <div class="tool-icon" style="background: rgba(200,87,46,0.15)">🌐</div>
-        <div class="tool-text"><div class="tool-name">HTTP Toolbox</div><div class="tool-desc">Lifecycle, versions, cache &amp; more</div></div>
-        <span class="arrow">→</span>
-      </a>
-      <a class="tool" href="flight-tracker/index.html">
-        <div class="tool-icon" style="background: rgba(122,91,176,0.15)">🛩️</div>
-        <div class="tool-text"><div class="tool-name">Flight Tracker</div><div class="tool-desc">Track live flights by flight number</div></div>
-        <span class="arrow">→</span>
-      </a>
-      <a class="tool" href="trip-countdown/index.html">
-        <div class="tool-icon" style="background: rgba(184,92,138,0.15)">🧳</div>
-        <div class="tool-text"><div class="tool-name">Trip Countdown</div><div class="tool-desc">Countdown to your next trip</div></div>
-        <span class="arrow">→</span>
-      </a>
-      <a class="tool" href="pomodoro/index.html">
-        <div class="tool-icon" style="background: rgba(200,87,46,0.15)">🍅</div>
-        <div class="tool-text"><div class="tool-name">Pomodoro</div><div class="tool-desc">Focus timer</div></div>
-        <span class="arrow">→</span>
-      </a>
-      <a class="tool" href="desk/todo/index.html">
-        <div class="tool-icon" style="background: rgba(58,143,114,0.15)">🗂️</div>
-        <div class="tool-text"><div class="tool-name">Desk</div><div class="tool-desc">Todo list &amp; bookmarks</div></div>
-        <span class="arrow">→</span>
-      </a>
-    </div>
 
-    <footer>Built for fun · <a href="https://github.com/ayushkothari27/vibe-coding">source on GitHub</a></footer>
+    <footer>Built for fun · <a href="https://github.com/ayushkothari27/arcade">source on GitHub</a></footer>
   </div>
 
   <script>
