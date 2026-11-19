@@ -11,5 +11,3 @@ Play at https://ayushkothari27.github.io/arcade/
 | **Forehead** | `forehead/` | Party guessing game: phone on your forehead, friends describe the footballer, tilt to score |
 | **Flaggle** | `flaggle/` | Daily flag-guessing puzzle (Wordle-style) |
 | **Asteroids** | `asteroids/` | Canvas-based Asteroids with touch controls |
-
-The todo and bookmarks pages moved to [desk](https://github.com/ayushkothari27/desk).
