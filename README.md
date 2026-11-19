@@ -2,8 +2,6 @@
 
 Small browser games, each a self-contained single HTML file with a shared dark theme. Works on desktop and touch.
 
-Play at https://ayushkothari27.github.io/arcade/
-
 | Game | Path | Description |
 |------|------|-------------|
 | **Shatter** | `shatter/` | Brick breaker: pop pixel-art pictures made of dots, multiply your balls, endless levels |
