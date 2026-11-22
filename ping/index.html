@@ -136,7 +136,7 @@ const C = {
 // before it reads a shot · err: how far off it aims, scaled up by errGrow as the ball speeds up · aim: how much
 // it angles shots · smart: chance it aims away from you · read: how well it reads spin
 // · spin: how much curve it puts on its own shots
-const CPU = { speed: 380, react: 0.12, err: 16, errGrow: 2.6, aim: 0.8, smart: 0.8, read: 1, spin: 0.6 };
+const CPU = { speed: 380, react: 0.2, err: 16, errGrow: 2.6, aim: 0.5, smart: 0.35, read: 0.6, spin: 0.3 };
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const now = () => performance.now() / 1000;
@@ -290,10 +290,15 @@ function updateHuman(i, dt) {
   const p = P[i];
   p.target += keys.bottom * 600 * Math.sqrt(pace()) * dt;
   p.target = clamp(p.target, PW / 2 + 4, FW - PW / 2 - 4);
-  // Glide toward the pointer on a critically damped spring: eases in and out, no overshoot.
-  const smooth = 0.08, maxV = 1500;
-  const w = 2 / smooth, x = w * dt, ease = 1 / (1 + x + 0.48 * x * x + 0.235 * x * x * x);
-  const change = clamp(p.x - p.target, -maxV * smooth, maxV * smooth);
+  glide(p, p.target, 1500, dt);
+}
+
+// Both paddles move the same way: a critically damped spring toward the target that eases
+// in and out with no overshoot, capped at maxV.
+const SMOOTH = 0.06;
+function glide(p, target, maxV, dt) {
+  const w = 2 / SMOOTH, x = w * dt, ease = 1 / (1 + x + 0.48 * x * x + 0.235 * x * x * x);
+  const change = clamp(p.x - target, -maxV * SMOOTH, maxV * SMOOTH);
   const temp = (p.v + w * change) * dt;
   p.v = (p.v - w * temp) * ease;
   p.x = clamp(p.x - change + (change + temp) * ease, PW / 2 + 4, FW - PW / 2 - 4);
@@ -317,11 +322,8 @@ function updateCPU(i, dt) {
     tx = FW / 2 + (b.x - FW / 2) * 0.35;   // drift back toward the middle
   }
   tx = clamp(tx, PW / 2 + 4, FW - PW / 2 - 4);
-  const max = d.speed * (1 + 0.6 * (pace() - 1)) * dt;
-  const step = clamp(tx - p.x, -max, max);
-  p.x += step;
+  glide(p, tx, d.speed * (1 + 0.6 * (pace() - 1)), dt);
   p.target = p.x;
-  p.v = p.v * 0.7 + (step / dt) * 0.3;
 }
 
 // Where the ball will cross paddle i's line. Runs the ball's own physics forward
