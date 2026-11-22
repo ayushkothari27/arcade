@@ -66,7 +66,8 @@
       border-radius: 20px;
       padding: 1.8rem 1.5rem 1.5rem;
       text-align: center;
-      overflow: hidden;
+      overflow: hidden auto;
+      max-height: calc(100svh - 32px);
     }
     .card::before {
       content: '';
@@ -124,18 +125,21 @@
     }
     .btn:hover { filter: brightness(1.1); transform: translateY(-1px); }
     .btn.ghost { background: var(--surface); border: 1px solid var(--border); }
-    .picker {
-      display: flex; align-items: center; justify-content: center; gap: 0.6rem;
-      margin: 0 0 1.1rem;
-      font-size: 0.82rem; color: var(--muted);
+    .levels { display: grid; gap: 0.6rem; margin: 0 0 1.2rem; text-align: left; }
+    .tier-name { font-size: 0.68rem; font-weight: 600; letter-spacing: 0.08em; margin-bottom: 0.3rem; }
+    .tier-lv { display: flex; flex-wrap: wrap; gap: 5px; }
+    .lv {
+      width: 30px; height: 30px;
+      border-radius: 9px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--muted);
+      font: inherit; font-size: 0.78rem; font-weight: 600;
+      cursor: pointer;
     }
-    .picker button {
-      width: 30px; height: 30px; border-radius: 50%;
-      border: 1px solid var(--border); background: var(--surface);
-      color: var(--text); font: inherit; font-size: 1rem; cursor: pointer;
-    }
-    .picker button:hover { border-color: rgba(255,255,255,0.22); }
-    .picker b { color: var(--text); font-size: 1.05rem; min-width: 2ch; display: inline-block; }
+    .lv:hover { border-color: rgba(255,255,255,0.25); color: var(--text); }
+    .lv.done { color: #7BC47F; border-color: rgba(58,143,114,0.55); }
+    .lv.on { background: var(--orange); border-color: var(--orange); color: var(--text); }
     .hint { margin-top: 0.9rem; font-size: 0.72rem; color: var(--muted); }
   </style>
 </head>
@@ -159,7 +163,7 @@ const BRICK_LEFT = (FW - (COLS * PITCH - (PITCH - DOT))) / 2;
 const BRICK_TOP = HUD_H + 30;
 const SHIELD_Y = FH - 18;
 const MAX_BALLS = 60;
-const MAX_START = 99;   // highest level the menu lets you jump to
+const LEVEL_COUNT = 30;   // clearing the last level wins the game
 
 const C = {
   bg: '#1A1A2E', orange: '#C8572E', yellow: '#C99A30', green: '#3A8F72', indigo: '#6366F1',
@@ -240,117 +244,73 @@ function save(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch 
 // ─────────────────────────────────────────────────
 //  LEVELS
 // ─────────────────────────────────────────────────
-// Seeded so each level number always builds the same layout.
-function rng(seed) {
-  return () => {
-    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
-    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
-    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
-    return ((t ^ t >>> 14) >>> 0) / 4294967296;
-  };
-}
-
-// Pixel-art pictures. Each row is the LEFT half (8 cells); the right half
-// mirrors it, and every cell becomes a 2×2 block of dots (32 dots across).
-// Letters are colors from PALETTE; '.' is empty.
-const PICTURES = [
-  { name: 'Heart', rows: [
-    '........', '..rrrr..', '.rrwwrr.', '.rwwrrrr', '.rrrrrrr', '.rrrrrrr',
-    '..rrrrrr', '...rrrrr', '....rrrr', '.....rrr', '......rr', '.......r'] },
-  { name: 'Star', rows: [
-    '.......y', '.......y', '......yy', '......yy', 'yyyyyyyy', '.yyyyyyy',
-    '...yyyyy', '....yyyy', '....yyyy', '...yyyy.', '..yyy...', '.yy.....'] },
-  { name: 'Smiley', rows: [
-    '.....yyy', '...yyyyy', '..yyyyyy', '.yyyykky', '.yyyykky', 'yyyyyyyy',
-    'yyyyyyyy', 'yykyyyyy', '.yykkyyy', '..yyykkk', '...yyyyy', '.....yyy'] },
-  { name: 'Rocket', rows: [
-    '.......w', '......ww', '.....wwb', '.....wbc', '.....wbc', '.....wwb', '.....www',
-    '....rwww', '...rrwww', '..rrrwww', '.....oyy', '......oy', '.......o'] },
-  { name: 'Tree', rows: [
-    '.......g', '......gg', '.....ggl', '....gggg', '.....ggg', '....gggg', '...ggggg',
-    '....gggg', '...ggggl', '..gggggg', '.......n', '.......n', '......nn'] },
-  { name: 'House', rows: [
-    '.......r', '......rr', '.....rrr', '....rrrr', '...rrrrr', '..rrrrrr',
-    '...wwwww', '...wccww', '...wccww', '...wwwwn', '...wwwwn', '...wwwwn'] },
-  { name: 'Crown', rows: [
-    '........', '.y......', '.yy....y', '.yyy..yy', '.yyyyyyy', '.yyyyyyy',
-    '.ypyyyyb', '.yyyyyyy', '.wwwwwww', '.wwwwwww'] },
-  { name: 'Gem', rows: [
-    '...ccccc', '..cwcccc', '.cwccccc', 'cccccccc', '.bcccccc', '..bccccc',
-    '...bcccc', '....bccc', '.....bcc', '......bc', '.......c'] },
-  { name: 'Apple', rows: [
-    '.......n', '......ln', '....lll.', '..rrrrrr', '.rwrrrrr', 'rwrrrrrr',
-    'rrrrrrrr', 'rrrrrrrr', '.rrrrrrr', '..rrrrrr', '...rrr.r'] },
-  { name: 'Cat', rows: [
-    '.v......', '.vv.....', '.vvv....', '.vvvvvvv', 'vvvvvvvv', 'vvwkvvvv',
-    'vvkkvvvv', 'vvvvvvvp', 'vvvvvvvv', '.vvvwvvv', '..vvvvvv', '....vvvv'] },
+// Hand-designed levels, made of dots on a 32-column grid.
+//   lowercase color letter = 1 hit · UPPERCASE = 2 hits · % = 3 hits · # = steel · * = bomb · . = empty
+//   16-char rows are the left half (mirrored); 8-char rows are pictures at 2× (each cell a 2×2 block).
+const LEVELS = [
+  { name: "Rainbow", rows: ['..rrrrrrrrrrrrrr', '..oooooooooooooo', '..yyyyyyyyyyyyyy', '..gggggggggggggg', '..cccccccccccccc', '..bbbbbbbbbbbbbb'] },
+  { name: "Heart", rows: ['........', '..rrrr..', '.rrwwrr.', '.rwwrrrr', '.rrrrrrr', '.rrrrrrr', '..rrrrrr', '...rrrrr', '....rrrr', '.....rrr', '......rr', '.......r'] },
+  { name: "Pyramid", rows: ['..............YY', '.............yyy', '............oooo', '...........ooooo', '..........rrrrrr', '.........rrrrrrr', '........pppppppp', '.......ppppppppp', '......vvvvvvvvvv', '.....vvvvvvvvvvv'] },
+  { name: "Star", rows: ['.......y', '.......y', '......yy', '......yy', 'yyyyyyyy', '.yyyyyy*', '...yyyyy', '....yyyy', '....yyyy', '...yyyy.', '..yyy...', '.yy.....'] },
+  { name: "Pillars", rows: ['..GG..CC..BB..PP', '..gg..cc..bb..pp', '..gg..cc..bb..pp', '..gg..cc..bb..pp', '..gg..cc..bb..pp', '..gg..cc..bb..pp', '..gg..cc..bb..pp', '..gg..cc..bb..pp', '..gg..cc..bb..pp', '..gg..cc..bb..pp', '..gg..cc..bb..pp'] },
+  { name: "Smiley", rows: ['.....yyy', '...yyyyy', '..yyyyyy', '.yyyyKKy', '.yyyyKKy', 'yyyyyyyy', 'yyyyyyyy', 'yykyyyyy', '.yykkyyy', '..yyykkk', '...yyyyy', '.....yyy'] },
+  { name: "Checker", rows: ['..BcBcBcBcBcBcBc', '..cBcBcBcBcBcBcB', '..BcBcBcBcBcBcBc', '..cBcBcBcBcBcBcB', '..BcBcBcBcBcBcBc', '..cBcBcBcBcBcBcB', '..BcBcBcBcBcBcBc', '..cBcBcBcBcBcBcB'] },
+  { name: "Rocket", rows: ['.......w', '......ww', '.....wwb', '.....wbC', '.....wbC', '.....wwb', '.....www', '....Rwww', '...RRwww', '..RRRwww', '.....oyy', '......oy', '.......o'] },
+  { name: "Shelf", rows: ['..oooooooooooooo', '..OOOOOOOOOOOOOO', '..oooooooooooooo', '................', '..#####....#####', '................', '..yyyyyyyyyyyyyy', '..gggggggggggggg'] },
+  { name: "Tree", rows: ['.......g', '......gg', '.....gg*', '....gggg', '.....ggg', '....gggg', '...gggg*', '....gggg', '...ggggl', '..gggggg', '.......N', '.......N', '......NN'] },
+  { name: "Diamond", rows: ['...............c', '.............ccc', '...........ccccC', '.........cccccCC', '.......cccccCCCC', '.....ccccCCCCCC*', '.......cccccCCCC', '.........cccccCC', '...........ccccC', '.............ccc', '...............c'] },
+  { name: "House", rows: ['.......R', '......RR', '.....RRR', '....rrrr', '...rrrrr', '..rrrrrr', '...wwwww', '...wCCww', '...wCCww', '...wwwwN', '...wwwwN', '...wwwwN'] },
+  { name: "Fortress", rows: ['..vvvvvvvvvvvvvv', '..pppppppppppppp', '................', '..##########....', '..#.............', '..#..VVVVVVVVVVV', '..#..V%%%%%%%%%%', '..#..V%%%%%%%%%*', '..#..V%%%%%%%%%%', '..#..VVVVVVVVVVV', '..#.............', '..###...........'] },
+  { name: "Crown", rows: ['........', '.y......', '.yy....y', '.yyy..yy', '.yyyyyyy', '.yyyyyyy', '.y%yyyy%', '.yyyyyyy', '.WWWWWWW', '.WWWWWWW'] },
+  { name: "Stairs", rows: ['..LLLL..........', '..llll..LLLL....', '..####..llll..LL', '........####..ll', '..............##', '................', '..YYYY..........', '..yyyy..YYYY....', '..####..yyyy..YY', '........####..yy', '..............##'] },
+  { name: "Gem", rows: ['...Ccccc', '..Cwcccc', '.Cwccccc', 'Cccccccc', '.Bcccccc', '..Bccccc', '...Bcccc', '....Bccc', '.....Bcc', '......Bc', '.......C'] },
+  { name: "Cages", rows: ['..cccccccccccccc', '..cccccccccccccc', '................', '..##..........##', '..#............#', '..#.PPPPPPPPPP.#', '..#.pppppppppp.#', '..#.P%%%%%%%%P.#', '..#.pppppppppp.#', '..#.PPPPPPPPPP.#', '..#............#', '..#####....#####'] },
+  { name: "Apple", rows: ['.......#', '......L#', '....Lll.', '..Rrrrrr', '.Rwrrrrr', 'Rwrrrrrr', 'Rrrrrrrr', 'Rrrrrrrr', '.Rrrrrrr', '..Rrrrrr', '...Rrr.r'] },
+  { name: "Chain", rows: ['..%%%%%%%%%%%%%%', '..%%*%%%%*%%%%*%', '..%%%%%%%%%%%%%%', '..VVVVVVVVVVVVVV', '..vvvvvvvvvvvvvv', '..VVVVVVVVVVVVVV', '..%%%%%%%%%%%%%%', '..%*%%%%*%%%%*%%', '..%%%%%%%%%%%%%%'] },
+  { name: "Cat", rows: ['.V......', '.Vv.....', '.Vvv....', '.Vvvvvvv', 'Vvvvvvvv', 'Vv%kvvvv', 'Vvkkvvvv', 'Vvvvvvvp', 'Vvvvvvvv', '.Vvvwvvv', '..Vvvvvv', '....Vvvv'] },
+  { name: "Towers", rows: ['..wwwwwwwwwwwwww', '................', '....########....', '....#BBBBBB#....', '....#BBBBBB#....', '....#%%%%%%#....', '....#bbbbbb#....', '....#bbbbbb#....', '....#%%%%%%#....', '....#BBBBBB#....', '....#BBBBBB#....', '....#%%%%%%#....', '....#bbbbbb#....'] },
+  { name: "Serpent", rows: ['..pppppppppppppp', '..############..', '..pppppppppppppp', '..PPPPPPPPPPPPPP', '......##########', '..cccccccccccccc', '..CCCCCCCCCCCCCC', '..############..', '..%%%%%%%%%%%%%%'] },
+  { name: "Grid", rows: ['..OOOOOOOOOOOOOO', '..%#%#%#%#%#%#%#', '..OOOOOOOOOOOOOO', '..#%#%#%#%#%#%#%', '..OOOOOOOOOOOOOO', '..%#%#%#%#%#%#%#', '..oooooooooooooo'] },
+  { name: "Funnel", rows: ['..rrrrrrrrrrrrrr', '..RRRRRRRRRRRRRR', '..%%%%%%%%%%%%%%', '..oooooooooooooo', '................', '..##............', '....##..........', '......##........', '........##......', '..........##....', '............##..'] },
+  { name: "Bulwark", rows: ['..RRRRRRRRRRRRRR', '..RRRRRRRRRRRRRR', '..%%%%%%%%%%%%%%', '..OOOOOOOOOOOOOO', '..OOOOOOO*OOOOOO', '..%%%%%%%%%%%%%%', '..YYYYYYYYYYYYYY', '..YYYYYYYYYYYYYY', '..%%%%%%%%%%%%%%', '..GGGGGGGGGGGGGG', '..GG*GGGGGGGGGGG'] },
+  { name: "Iron Heart", rows: ['..####..', '.#RRRR#.', '.RRwwRR#', '.RwwRRRR', '.RRRRRRR', '.RRRRRRR', '..RRRRRR', '...RRRRR', '....RRRR', '.....RRR', '......RR', '.......R'] },
+  { name: "Vault", rows: ['..wwwwwwwwwwwwww', '..wwwwwwwwwwwwww', '................', '....#########...', '....#...........', '....#.%%%%%%%%%%', '....#.%%%%**%%%%', '....#.%%%%%%%%%%', '....#...........', '....##########..'] },
+  { name: "Waves", rows: ['........#v%%#v..', '.......v%%VV%%v.', '..v..vv%VV..VV%v', '..%v#%%V......V%', '..V%%VV........V', '......bb%%bb....', '.....b%%BB%%#...', '...b#%BB..BB%bb.', '..b%%B......B%%b', '..%BB........BB%', '....#c%%#c......', '...c%%CC%%c.....', '..c%CC..CC%c#..c', '..%C......C%%cc%', '..C........CC%%C'] },
+  { name: "Labyrinth", rows: ['..##############', '..#bbbbbb#cccccc', '..#bBBBBb#cCCCCC', '..#bbbbbb.cccccc', '..###.####.#####', '..#pppppp#vvvvvv', '..#pPPPPp#v%%%%%', '..#pppppp.vvvvvv', '..##.#######.###'] },
+  { name: "Citadel", rows: ['..wwwwwwwwwwwwww', '..%%%%%%%%%%%%%%', '..vvvvvvvvvvvvvv', '................', '..##..######..##', '..#..........#..', '..#.PPPPPPPP.#..', '..#.P%%%%%%P.#%.', '..#.PPPPPPPP.#..', '..#..........#..', '..####....####..', '................', '..%%%%%%%%%%%%%%', '..RRRRRRRRRRRRRR'] },
 ];
 
-// Generated dot patterns for later levels: (x, y) on a 32 × rows grid → filled?
-const PATTERNS = [
-  (x, y, R) => { const d = Math.hypot(x - 15.5, (y - (R - 1) / 2) * 1.3); return d < 15 && Math.floor(d) % 4 < 2; },  // rings
-  (x, y, R) => Math.abs(y - R / 2 - Math.sin(x / 3) * 4) < 4,                                               // wave
-  (x, y) => ((x >> 2) + (y >> 2)) % 2 === 0,                                                               // blocks
-  (x, y, R) => Math.abs(x - 15.5) / 16 + Math.abs(y - (R - 1) / 2) / (R / 2) < 1 && (x + y) % 2 === 0,      // lattice diamond
-  (x, y, R, rand) => rand() < 0.55,                                                                         // scatter
-  (x, y) => (y % 6 < 3) !== (x < 16 ? x % 8 < 4 : (31 - x) % 8 < 4),                                       // weave
+const TIERS = [
+  { name: 'Easy',   from: 1,  to: 6,  color: C.green },
+  { name: 'Medium', from: 7,  to: 12, color: C.yellow },
+  { name: 'Hard',   from: 13, to: 20, color: C.orange },
+  { name: 'Expert', from: 21, to: 30, color: C.pink },
 ];
-const PATTERN_COLORS = ['g', 'l', 'c', 'b', 'v', 'p', 'r', 'o', 'y'];
 
-/** Builds a level as dots on a 32-column grid. */
+/** Builds a level's dots from its map. */
 function buildLevel(level) {
-  const rand = rng(level * 7919 + 13);
-  const cells = [];   // [x, y, colorChar]
-
-  // Levels 1–10 are the pictures in order; after that pictures and patterns alternate.
-  const usePicture = level <= PICTURES.length || level % 2 === 0;
-  if (usePicture) {
-    const pic = PICTURES[level <= PICTURES.length ? level - 1 : Math.floor(rand() * PICTURES.length)];
-    pic.rows.forEach((half, r) => {
-      const row = half + [...half].reverse().join('');
-      [...row].forEach((ch, c) => {
-        if (ch === '.') return;
-        for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) cells.push([c * 2 + dx, r * 2 + dy, ch]);
-      });
-    });
-  } else {
-    const rows = Math.min(14 + Math.floor(level / 4), 26);
-    const shape = PATTERNS[Math.floor(rand() * PATTERNS.length)];
-    const offset = Math.floor(rand() * PATTERN_COLORS.length);
-    for (let y = 0; y < rows; y++) {
-      for (let x = 0; x < COLS / 2; x++) {
-        if (!shape(x, y, rows, rand)) continue;
-        const ch = PATTERN_COLORS[(Math.floor(y / 3) + offset) % PATTERN_COLORS.length];
-        cells.push([x, y, ch], [COLS - 1 - x, y, ch]);
-      }
-    }
-  }
-
-  // Difficulty: tougher dots, steel and bombs creep in as levels go up.
-  const p2 = level >= 4 ? Math.min(0.35, (level - 3) * 0.03) : 0;
-  const p3 = level >= 12 ? Math.min(0.2, (level - 11) * 0.02) : 0;
-  const pSteel = level >= 6 ? Math.min(0.05, (level - 5) * 0.004) : 0;
-  const pBomb = level >= 3 ? 0.015 : 0;
-
+  const def = LEVELS[level - 1];
+  const scale = def.rows[0].length === 8 ? 2 : 1;
   const grid = new Array(COLS * GRID_ROWS).fill(null);
   const bricks = [];
-  for (const [x, y, ch] of cells) {
-    if (y >= GRID_ROWS || grid[y * COLS + x]) continue;
-    const roll = rand();
-    let kind = 'normal', hp = 1;
-    if (roll < pSteel) kind = 'steel';
-    else if (roll < pSteel + pBomb) kind = 'bomb';
-    else { const h = rand(); hp = h < p3 ? 3 : h < p3 + p2 ? 2 : 1; }
-    const b = {
-      c: x, r: y, kind, hp, max: hp, flash: 0,
-      color: kind === 'steel' ? C.steel : kind === 'bomb' ? C.pink : PALETTE[ch],
-      cx: BRICK_LEFT + x * PITCH + DOT / 2, cy: BRICK_TOP + y * PITCH + DOT / 2,
-    };
-    grid[y * COLS + x] = b;
-    bricks.push(b);
-  }
-  if (!bricks.some(b => b.kind !== 'steel')) bricks.forEach(b => { b.kind = 'normal'; b.hp = b.max = 1; b.color = C.green; });
-  return { bricks, grid, alive: bricks.filter(b => b.kind !== 'steel').length };
+  def.rows.forEach((half, r) => {
+    const row = half + [...half].reverse().join('');
+    [...row].forEach((ch, c) => {
+      if (ch === '.') return;
+      for (let dy = 0; dy < scale; dy++) for (let dx = 0; dx < scale; dx++) {
+        const x = c * scale + dx, y = r * scale + dy;
+        if (y >= GRID_ROWS || grid[y * COLS + x]) continue;
+        const kind = ch === '#' ? 'steel' : ch === '*' ? 'bomb' : 'normal';
+        const hp = ch === '%' ? 3 : /[A-Z]/.test(ch) ? 2 : 1;
+        const color = kind === 'steel' ? C.steel : kind === 'bomb' ? C.pink : ch === '%' ? C.yellow : PALETTE[ch.toLowerCase()];
+        const b = { c: x, r: y, kind, hp, max: hp, flash: 0, color,
+          cx: BRICK_LEFT + x * PITCH + DOT / 2, cy: BRICK_TOP + y * PITCH + DOT / 2 };
+        grid[y * COLS + x] = b;
+        bricks.push(b);
+      }
+    });
+  });
+  return { bricks, grid, alive: bricks.filter(b => b.kind !== 'steel').length, name: def.name };
 }
 
 // ─────────────────────────────────────────────────
@@ -358,14 +318,16 @@ function buildLevel(level) {
 // ─────────────────────────────────────────────────
 let state = 'menu';   // menu | ready | playing | paused | cleared | over
 const G = {
-  level: 1, score: 0, lives: 3, combo: 0,
+  level: 1, score: 0, lives: 3, combo: 0, rallyHits: 0,
   bricks: [], grid: [], alive: 0, balls: [], drops: [], particles: [],
   paddle: { x: FW / 2, w: PADDLE_W, target: FW / 2 },
   fx: { wide: 0, shrink: 0, slow: 0, fire: 0 },
   shield: false, shake: 0, banner: null, clearAt: 0,
 };
 
-const ballSpeed = () => 280 * (1 + Math.min(0.4, (G.level - 1) * 0.025)) * (G.fx.slow > 0 ? 0.68 : 1);
+// Faster on later levels, and creeping up with each paddle hit until you lose a ball.
+const ballSpeed = () => 270 * (1 + 0.35 * (G.level - 1) / (LEVEL_COUNT - 1))
+  * (1 + Math.min(0.18, G.rallyHits * 0.006)) * (G.fx.slow > 0 ? 0.68 : 1);
 
 function newGame(level = 1) {
   G.level = level; G.score = 0; G.lives = 3;
@@ -377,14 +339,14 @@ function startLevel() {
   G.drops = []; G.particles = [];
   G.fx = { wide: 0, shrink: 0, slow: 0, fire: 0 };
   G.shield = false;
-  G.banner = { text: `Level ${G.level}`, t: now() };
-  save('shatter-level', Math.max(load('shatter-level', 1), G.level));
+  G.banner = { text: `${G.level} · ${G.name}`, t: now() };
   resetBall();
   hideCard();
 }
 
 function resetBall() {
   G.combo = 0;
+  G.rallyHits = 0;
   G.balls = [{ x: G.paddle.x, y: PADDLE_Y - BALL_R - 1, vx: 0, vy: 0, stuck: true, trail: [] }];
   state = 'ready';
 }
@@ -409,7 +371,10 @@ function update(dt) {
   updatePaddle(dt);
   updateParticles(dt);
   if (state === 'cleared') {
-    if (now() - G.clearAt > 1.6) { G.level++; startLevel(); }
+    if (now() - G.clearAt > 1.6) {
+      if (G.level >= LEVEL_COUNT) return showWin();
+      G.level++; startLevel();
+    }
     return;
   }
   if (state !== 'playing' && state !== 'ready') return;
@@ -446,7 +411,9 @@ function updatePaddle(dt) {
   const wantW = PADDLE_W * (G.fx.wide > 0 ? 1.55 : G.fx.shrink > 0 ? 0.62 : 1);
   p.w += (wantW - p.w) * Math.min(1, dt * 10);
   p.target = Math.max(p.w / 2 + 4, Math.min(FW - p.w / 2 - 4, p.target));
+  const prev = p.x;
   p.x += (p.target - p.x) * Math.min(1, dt * 22);
+  p.vel = (p.vel || 0) * 0.6 + ((p.x - prev) / Math.max(dt, 1e-4)) * 0.4;
 }
 
 function moveBall(b, dt) {
@@ -466,8 +433,13 @@ function moveBall(b, dt) {
     const p = G.paddle;
     if (b.vy > 0 && b.y + BALL_R >= PADDLE_Y && py + BALL_R <= PADDLE_Y + 2 &&
         b.x >= p.x - p.w / 2 - BALL_R && b.x <= p.x + p.w / 2 + BALL_R) {
+      // Center sends the ball up steeply, the edges at sharp angles, and a moving
+      // paddle nudges it the way it's moving.
       const hit = Math.max(-1, Math.min(1, (b.x - p.x) / (p.w / 2)));
-      const a = hit * 62 * Math.PI / 180;
+      const shaped = Math.sign(hit) * Math.pow(Math.abs(hit), 1.25) * 60;
+      const english = Math.max(-12, Math.min(12, (p.vel || 0) / 60));
+      const a = Math.max(-64, Math.min(64, shaped + english)) * Math.PI / 180;
+      G.rallyHits++;
       const s = ballSpeed();
       b.vx = Math.sin(a) * s; b.vy = -Math.cos(a) * s;
       b.y = PADDLE_Y - BALL_R;
@@ -496,10 +468,14 @@ function moveBall(b, dt) {
         const fire = G.fx.fire > 0 && br.kind !== 'steel';
         hitBrick(br, fire);
         if (fire) continue;
-        const nx = d > 0.001 ? dx / d : 0, ny = d > 0.001 ? dy / d : -1;
-        const into = b.vx * nx + b.vy * ny;
-        if (into < 0) { b.vx -= 2 * into * nx; b.vy -= 2 * into * ny; }
-        b.x = br.cx + nx * (BALL_R + DOT_R); b.y = br.cy + ny * (BALL_R + DOT_R);
+        // Bounce like a brick: flip the axis the ball came in on, and push it clear.
+        if (Math.abs(dx) > Math.abs(dy)) {
+          b.vx = Math.sign(dx || 1) * Math.abs(b.vx);
+          b.x = br.cx + Math.sign(dx || 1) * (BALL_R + DOT_R);
+        } else {
+          b.vy = Math.sign(dy || 1) * Math.abs(b.vy);
+          b.y = br.cy + Math.sign(dy || 1) * (BALL_R + DOT_R);
+        }
         bounced = true;
         break;
       }
@@ -507,7 +483,7 @@ function moveBall(b, dt) {
   }
 
   // Keep the ball from sliding along nearly flat forever.
-  const s = ballSpeed(), minVy = s * 0.28;
+  const s = ballSpeed(), minVy = s * 0.3;
   if (Math.abs(b.vy) < minVy) {
     b.vy = Math.sign(b.vy || -1) * minVy;
     b.vx = Math.sign(b.vx || 1) * Math.sqrt(Math.max(0, s * s - minVy * minVy));
@@ -631,6 +607,7 @@ function levelCleared() {
   const bonus = 250 * G.level + G.lives * 100;
   G.score += bonus;
   G.banner = { text: `Level ${G.level} cleared · +${bonus}`, t: now(), color: C.yellow };
+  markCleared(G.level);
   sfx.clear();
 }
 
@@ -661,19 +638,31 @@ const pill = type => `<span class="pill" style="background:${POWERS[type].color}
 
 function showMenu() {
   state = 'menu';
-  const reached = load('shatter-level', 1), best = load('shatter-best', 0);
-  const buttons = [{ label: 'Play', run: () => newGame(pickedLevel) }];
-  if (reached > 1) buttons.push({ label: `Continue · level ${reached}`, ghost: true, run: () => newGame(reached) });
+  const best = load('shatter-best', 0);
   showCard(`
     <h1>Shat<em>ter</em></h1>
-    <p class="sub">Pop every dot. Catch power-ups and let the balls multiply.</p>
+    <p class="sub">Pop every dot across ${LEVEL_COUNT} levels. Catch power-ups and let the balls multiply.</p>
     <div class="legend">
       ${['multi', 'plus3', 'wide', 'fire', 'slow', 'shield', 'life', 'shrink'].map(t => `<div>${pill(t)}<span>${POWERS[t].name}</span></div>`).join('')}
     </div>
-    ${pickerHTML()}
-  `, buttons);
-  wirePicker();
+    ${levelsHTML()}
+  `, [{ label: `Play level ${pickedLevel}`, run: () => newGame(pickedLevel) }]);
+  wireLevels();
   card.insertAdjacentHTML('beforeend', `<p class="hint">Move: mouse, finger or ← → · Launch: click, tap or space${best ? ` · Best ${best.toLocaleString()}` : ''}</p>`);
+}
+
+function showWin() {
+  state = 'over';
+  const best = load('shatter-best', 0), isBest = G.score > best;
+  if (isBest) save('shatter-best', G.score);
+  showCard(`
+    <h1>All <em>shattered</em></h1>
+    <p class="sub">Every one of the ${LEVEL_COUNT} levels cleared.</p>
+    <div class="lines">
+      <div><span>Score</span><span>${G.score.toLocaleString()}</span></div>
+      <div><span>${isBest ? 'New best!' : 'Best'}</span><span>${Math.max(best, G.score).toLocaleString()}</span></div>
+    </div>
+  `, [{ label: 'Back to levels', run: showMenu }]);
 }
 
 function showPause() {
@@ -696,23 +685,37 @@ function showOver(isBest, best) {
       <div><span>${isBest ? 'New best!' : 'Best'}</span><span>${best.toLocaleString()}</span></div>
     </div>
   `, [
-    { label: 'Play again', run: () => newGame(pickedLevel) },
-    { label: `Retry level ${G.level}`, ghost: true, run: () => newGame(G.level) },
+    { label: `Retry level ${G.level}`, run: () => newGame(G.level) },
+    { label: 'Levels', ghost: true, run: showMenu },
   ]);
 }
 
 // ─────────────────────────────────────────────────
-//  LEVEL PICKER (menu stepper; ?level=N in the URL preselects it)
+//  LEVEL PICKER (tiles by tier; ?level=N in the URL preselects it)
 // ─────────────────────────────────────────────────
-const clampLevel = n => Math.max(1, Math.min(MAX_START, Math.floor(+n) || 1));
+const clampLevel = n => Math.max(1, Math.min(LEVEL_COUNT, Math.floor(+n) || 1));
 let pickedLevel = clampLevel(new URLSearchParams(location.search).get('level') || 1);
-const pickerHTML = () =>
-  `<div class="picker">Start at level <button data-step="-1" aria-label="Lower level">−</button><b id="picked">${pickedLevel}</b><button data-step="1" aria-label="Higher level">+</button></div>`;
-function wirePicker() {
-  card.querySelectorAll('.picker button').forEach(b => b.addEventListener('click', e => {
+const loadCleared = () => new Set(load('shatter-cleared', []));
+function markCleared(n) { const c = loadCleared(); c.add(n); save('shatter-cleared', [...c]); }
+
+function levelsHTML() {
+  const cleared = loadCleared();
+  return `<div class="levels">${TIERS.map(t => {
+    const btns = [];
+    for (let n = t.from; n <= t.to; n++) {
+      const cls = ['lv', cleared.has(n) && 'done', n === pickedLevel && 'on'].filter(Boolean).join(' ');
+      btns.push(`<button class="${cls}" data-lv="${n}" title="${LEVELS[n - 1].name}" aria-label="Level ${n}, ${LEVELS[n - 1].name}${cleared.has(n) ? ', cleared' : ''}">${n}</button>`);
+    }
+    return `<div><div class="tier-name" style="color:${t.color}">${t.name.toUpperCase()}</div><div class="tier-lv">${btns.join('')}</div></div>`;
+  }).join('')}</div>`;
+}
+
+function wireLevels() {
+  card.querySelectorAll('.lv').forEach(b => b.addEventListener('click', e => {
     e.stopPropagation();
-    pickedLevel = clampLevel(pickedLevel + +b.dataset.step);
-    card.querySelector('#picked').textContent = pickedLevel;
+    pickedLevel = +b.dataset.lv;
+    card.querySelectorAll('.lv').forEach(x => x.classList.toggle('on', x === b));
+    card.querySelector('.btn').textContent = `Play level ${pickedLevel}`;
   }));
 }
 
