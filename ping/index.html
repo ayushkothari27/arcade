@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#1A1A2E">
+  <title>Ping</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,700;1,9..144,400&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:      #1A1A2E;
+      --orange:  #C8572E;
+      --yellow:  #C99A30;
+      --green:   #3A8F72;
+      --indigo:  #6366F1;
+      --pink:    #B85C8A;
+      --muted:   #9CA3AF;
+      --surface: rgba(255,255,255,0.05);
+      --border:  rgba(255,255,255,0.09);
+      --text:    #F9FAFB;
+    }
+
+    html, body { height: 100%; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Space Grotesk', sans-serif;
+      overflow: hidden;
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    canvas { display: block; position: fixed; inset: 0; width: 100vw; height: 100svh; }
+
+    .back {
+      position: fixed;
+      top: max(12px, env(safe-area-inset-top, 0px));
+      left: 14px;
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 0.8rem;
+      z-index: 20;
+    }
+    .back:hover { color: var(--text); }
+
+    #overlay {
+      position: fixed; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      padding: 16px;
+      background: rgba(26,26,46,0.55);
+      backdrop-filter: blur(3px);
+      z-index: 10;
+    }
+    #overlay.hidden { display: none; }
+
+    .card {
+      position: relative;
+      width: min(380px, 100%);
+      background: rgba(26,26,46,0.96);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 1.8rem 1.5rem 1.5rem;
+      text-align: center;
+      overflow: hidden;
+    }
+    .card::before {
+      content: '';
+      position: absolute;
+      width: 260px; height: 260px;
+      top: -130px; right: -100px;
+      background: var(--indigo);
+      border-radius: 50%;
+      filter: blur(80px);
+      opacity: 0.22;
+      pointer-events: none;
+    }
+    .card h1 {
+      font-family: 'Fraunces', Georgia, serif;
+      font-size: 2.2rem;
+      letter-spacing: -0.01em;
+      margin-bottom: 0.3rem;
+    }
+    .card h1 em { font-style: italic; font-weight: 400; color: var(--yellow); }
+    .sub { color: var(--muted); font-size: 0.88rem; margin-bottom: 1.2rem; line-height: 1.4; }
+
+    .seg {
+      display: inline-flex;
+      padding: 3px;
+      margin: 0 0 1.2rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+    }
+    .seg button {
+      padding: 0.45rem 0.95rem;
+      border: none;
+      border-radius: 999px;
+      background: transparent;
+      color: var(--muted);
+      font: inherit; font-size: 0.82rem; font-weight: 600;
+      cursor: pointer;
+    }
+    .seg button.on { background: rgba(255,255,255,0.12); color: var(--text); }
+
+    .lines { display: grid; gap: 0.35rem; margin: 0 0 1.2rem; font-size: 0.9rem; }
+    .lines div { display: flex; justify-content: space-between; color: var(--muted); }
+    .lines div span:last-child { color: var(--text); font-weight: 600; }
+
+    .btns { display: flex; gap: 0.6rem; justify-content: center; flex-wrap: wrap; }
+    .btn {
+      padding: 0.75rem 1.5rem;
+      border-radius: 999px;
+      border: none;
+      background: var(--orange);
+      color: var(--text);
+      font: inherit; font-weight: 600; font-size: 0.95rem;
+      cursor: pointer;
+      transition: transform 0.12s ease, filter 0.12s ease;
+    }
+    .btn:hover { filter: brightness(1.1); transform: translateY(-1px); }
+    .btn.ghost { background: var(--surface); border: 1px solid var(--border); }
+    .hint { margin-top: 0.9rem; font-size: 0.72rem; color: var(--muted); line-height: 1.5; }
+    @media (prefers-reduced-motion: reduce) { .btn { transition: none; } }
+  </style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<a class="back" href="../index.html">← arcade</a>
+<div id="overlay"><div class="card" id="card"></div></div>
+
+<script>
+// ─────────────────────────────────────────────────
+//  FIELD (logical units; scaled to fit the screen)
+// ─────────────────────────────────────────────────
+const FW = 400, FH = 680;
+const PW = 84, PH = 12, R = 7;
+const BOT_Y = FH - 64;          // bottom paddle's top edge
+const TOP_Y = 64 - PH;          // top paddle's top edge
+const BASE_SPEED = 300;
+const CURVE = 240;              // sideways pull of full spin, px/s²
+const WIN = 7;                  // first to 7, win by 2
+
+const C = {
+  bg: '#1A1A2E', orange: '#C8572E', yellow: '#C99A30', green: '#3A8F72', indigo: '#6366F1',
+  pink: '#B85C8A', muted: '#9CA3AF', white: '#F9FAFB',
+};
+
+// speed: max paddle speed · react: seconds before it reads a shot · err: how far off it aims
+// (grows with rally speed) · aim: how much it angles shots · read: how well it reads spin
+const DIFF = {
+  easy:   { label: 'Easy',   speed: 220, react: 0.38, err: 34, aim: 0.15, read: 0 },
+  normal: { label: 'Normal', speed: 320, react: 0.24, err: 20, aim: 0.4,  read: 0.45 },
+  hard:   { label: 'Hard',   speed: 440, react: 0.13, err: 10, aim: 0.7,  read: 0.85 },
+};
+
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const now = () => performance.now() / 1000;
+const speedFor = rally => BASE_SPEED * (1 + Math.min(0.9, rally * 0.045));
+
+// ─────────────────────────────────────────────────
+//  CANVAS
+// ─────────────────────────────────────────────────
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let W, H, DPR, scale = 1, ox = 0, oy = 0;
+
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  W = window.innerWidth; H = window.innerHeight;
+  canvas.width = Math.round(W * DPR); canvas.height = Math.round(H * DPR);
+  scale = Math.min(W / FW, H / FH);
+  ox = (W - FW * scale) / 2;
+  oy = (H - FH * scale) / 2;
+}
+window.addEventListener('resize', resize);
+resize();
+
+// ─────────────────────────────────────────────────
+//  AUDIO
+// ─────────────────────────────────────────────────
+let AC = null, muted = false;
+function ensureAudio() {
+  if (AC) return;
+  try { AC = new (window.AudioContext || window.webkitAudioContext)(); } catch {}
+}
+function tone(freq, dur, { type = 'square', vol = 0.06, to = null, delay = 0 } = {}) {
+  if (!AC || muted) return;
+  const t = AC.currentTime + delay;
+  const o = AC.createOscillator(), g = AC.createGain();
+  o.type = type;
+  o.frequency.setValueAtTime(freq, t);
+  if (to) o.frequency.exponentialRampToValueAtTime(to, t + dur);
+  g.gain.setValueAtTime(vol, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  o.connect(g); g.connect(AC.destination);
+  o.start(t); o.stop(t + dur + 0.02);
+}
+const quiet = () => state === 'menu';   // the demo behind the menu stays silent
+const sfx = {
+  hit:   (rally, top) => !quiet() && tone((top ? 440 : 520) + Math.min(rally, 25) * 14, 0.06, { type: 'triangle', vol: 0.13 }),
+  curve: () => !quiet() && tone(700, 0.14, { type: 'sine', vol: 0.06, to: 1100 }),
+  wall:  () => !quiet() && tone(240, 0.04, { type: 'triangle', vol: 0.07 }),
+  win:   () => !quiet() && [523, 659, 784].forEach((f, i) => tone(f, 0.14, { type: 'triangle', vol: 0.12, delay: i * 0.07 })),
+  lose:  () => !quiet() && tone(330, 0.35, { type: 'triangle', vol: 0.12, to: 110 }),
+  match: () => [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.18, { type: 'triangle', vol: 0.12, delay: i * 0.08 })),
+};
+
+// ─────────────────────────────────────────────────
+//  STORAGE (optional)
+// ─────────────────────────────────────────────────
+function load(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch { return d; } }
+function save(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
+
+// ─────────────────────────────────────────────────
+//  STATE
+// ─────────────────────────────────────────────────
+let state = 'menu';   // menu | serve | playing | point | paused | over
+const newPaddle = y => ({ x: FW / 2, target: FW / 2, v: 0, y, flash: 0, pred: FW / 2, err: 0, aim: 0, think: 0 });
+const P = [newPaddle(BOT_Y), newPaddle(TOP_Y)];   // 0 = bottom, 1 = top
+const G = {
+  diff: load('ping-diff', 'normal'),
+  score: [0, 0], server: 0, rally: 0, matchRally: 0,
+  ball: null, particles: [], banner: null, shake: 0,
+  serveAt: 0, pointAt: 0, matchOver: false,
+};
+if (!DIFF[G.diff]) G.diff = 'normal';
+
+const isCPU = i => state === 'menu' || i === 1;
+const skill = () => DIFF[state === 'menu' ? 'normal' : G.diff];
+
+function newMatch() {
+  G.score = [0, 0];
+  G.matchRally = 0;
+  G.matchOver = false;
+  G.particles = [];
+  G.server = Math.random() < 0.5 ? 0 : 1;
+  G.banner = null;
+  hideCard();
+  state = 'serve';
+  setupServe();
+}
+
+function setupServe() {
+  state = state === 'menu' ? 'menu' : 'serve';
+  G.rally = 0;
+  const p = P[G.server];
+  G.ball = { x: p.x, y: 0, vx: 0, vy: 0, spin: 0, stuck: true, trail: [] };
+  placeOnServer();
+  G.serveAt = now() + (isCPU(G.server) ? 0.9 : 4);
+  // A CPU server shuffles to a random spot first.
+  if (isCPU(G.server)) P[G.server].pred = FW / 2 + (Math.random() * 2 - 1) * 110;
+}
+
+function placeOnServer() {
+  const b = G.ball, p = P[G.server];
+  b.x = p.x;
+  b.y = G.server === 0 ? BOT_Y - R - 1 : TOP_Y + PH + R + 1;
+}
+
+function serve() {
+  const b = G.ball;
+  if (!b || !b.stuck) return;
+  const p = P[G.server];
+  const lean = clamp(p.v / 400, -1, 1);
+  const a = (lean * 25 + (Math.random() * 24 - 12)) * Math.PI / 180;
+  const s = speedFor(0);
+  b.vx = Math.sin(a) * s;
+  b.vy = (G.server === 0 ? -1 : 1) * Math.cos(a) * s;
+  b.spin = clamp(p.v / 900, -1, 1) * 0.6;
+  b.stuck = false;
+  if (state !== 'menu') state = 'playing';
+  planCPU(1 - G.server);
+  sfx.hit(0, G.server === 1);
+}
+
+// ─────────────────────────────────────────────────
+//  UPDATE
+// ─────────────────────────────────────────────────
+function update(dt) {
+  updateParticles(dt);
+  for (const p of P) p.flash = Math.max(0, p.flash - dt * 5);
+  G.shake = Math.max(0, G.shake - dt * 30);
+  if (state === 'paused' || state === 'over') return;
+
+  for (let i = 0; i < 2; i++) isCPU(i) ? updateCPU(i, dt) : updateHuman(i, dt);
+
+  if (state === 'point') {
+    if (now() - G.pointAt > 1.1) {
+      if (G.matchOver) return matchOver();
+      setupServe();
+    }
+    return;
+  }
+
+  const b = G.ball;
+  if (!b) return;
+  if (b.stuck) {
+    placeOnServer();
+    if (now() >= G.serveAt) serve();
+    return;
+  }
+  moveBall(b, dt);
+}
+
+function updateHuman(i, dt) {
+  const p = P[i];
+  p.target += keys.bottom * 600 * dt;
+  p.target = clamp(p.target, PW / 2 + 4, FW - PW / 2 - 4);
+  const prev = p.x;
+  p.x += (p.target - p.x) * Math.min(1, dt * 24);
+  p.v = p.v * 0.7 + ((p.x - prev) / dt) * 0.3;
+}
+
+function updateCPU(i, dt) {
+  const p = P[i], d = skill(), b = G.ball;
+  let tx = FW / 2;
+  const coming = b && !b.stuck && (i === 0 ? b.vy > 0 : b.vy < 0);
+  if (b && b.stuck && G.server === i) {
+    tx = p.pred;
+  } else if (coming && now() < p.think) {
+    tx = p.x;   // still reacting: hold position
+  } else if (coming) {
+    if (now() > p.think) {
+      p.think = now() + 0.12;
+      p.pred = predictX(b, i, d.read);
+    }
+    tx = p.pred + p.err - p.aim;
+  } else if (b) {
+    tx = FW / 2 + (b.x - FW / 2) * 0.35;   // drift back toward the middle
+  }
+  tx = clamp(tx, PW / 2 + 4, FW - PW / 2 - 4);
+  const step = clamp(tx - p.x, -d.speed * dt, d.speed * dt);
+  p.x += step;
+  p.target = p.x;
+  p.v = p.v * 0.7 + (step / dt) * 0.3;
+}
+
+// Where the ball will cross paddle i's line, bouncing off the side walls.
+function predictX(b, i, read) {
+  const y = i === 0 ? BOT_Y - R : TOP_Y + PH + R;
+  const t = Math.max(0, (y - b.y) / b.vy);
+  let x = b.x + b.vx * t + 0.5 * b.spin * CURVE * t * t * read * 0.6;
+  const span = FW - 2 * R;
+  let u = ((x - R) % (2 * span) + 2 * span) % (2 * span);
+  if (u > span) u = 2 * span - u;
+  return R + u;
+}
+
+// Picks a fresh aiming error and shot angle for a CPU paddle about to receive.
+function planCPU(i) {
+  if (!isCPU(i)) return;
+  const d = skill(), p = P[i];
+  p.err = (Math.random() * 2 - 1) * d.err * (1 + G.rally * 0.12);
+  p.aim = (Math.random() * 2 - 1) * d.aim * PW / 2;
+  p.think = now() + d.react * (0.7 + Math.random() * 0.6);
+}
+
+function moveBall(b, dt) {
+  const s = speedFor(G.rally);
+  const steps = Math.max(1, Math.ceil(s * dt / 3));
+  const h = dt / steps;
+  for (let n = 0; n < steps; n++) {
+    const py = b.y;
+    b.vx += b.spin * CURVE * h;
+    b.x += b.vx * h; b.y += b.vy * h;
+
+    if (b.x < R) { b.x = R; b.vx = Math.abs(b.vx); b.spin *= 0.3; sfx.wall(); }
+    if (b.x > FW - R) { b.x = FW - R; b.vx = -Math.abs(b.vx); b.spin *= 0.3; sfx.wall(); }
+
+    const p0 = P[0], p1 = P[1];
+    if (b.vy > 0 && b.y + R >= BOT_Y && py + R <= BOT_Y + PH && Math.abs(b.x - p0.x) <= PW / 2 + R) {
+      hitPaddle(b, 0);
+    } else if (b.vy < 0 && b.y - R <= TOP_Y + PH && py - R >= TOP_Y && Math.abs(b.x - p1.x) <= PW / 2 + R) {
+      hitPaddle(b, 1);
+    }
+
+    if (b.y > FH + R * 2) return pointTo(1);
+    if (b.y < -R * 2) return pointTo(0);
+  }
+
+  b.spin *= Math.exp(-dt * 0.9);
+  if (Math.abs(b.spin) < 0.02) b.spin = 0;
+
+  // Curving bends the path but never changes speed; keep it from going too flat.
+  const minVy = s * 0.42;
+  const cur = Math.hypot(b.vx, b.vy) || 1;
+  b.vx *= s / cur; b.vy *= s / cur;
+  if (Math.abs(b.vy) < minVy) {
+    b.vy = Math.sign(b.vy || -1) * minVy;
+    b.vx = Math.sign(b.vx || 1) * Math.sqrt(s * s - minVy * minVy);
+  }
+
+  b.trail.push([b.x, b.y]);
+  if (b.trail.length > 10) b.trail.shift();
+}
+
+function hitPaddle(b, i) {
+  const p = P[i];
+  const off = clamp((b.x - p.x) / (PW / 2), -1, 1);
+  const a = off * 55 * Math.PI / 180;
+  G.rally++;
+  const s = speedFor(G.rally);
+  b.vx = Math.sin(a) * s;
+  b.vy = (i === 0 ? -1 : 1) * Math.cos(a) * s;
+  b.y = i === 0 ? BOT_Y - R : TOP_Y + PH + R;
+  // Swiping the paddle through the hit puts spin on the ball.
+  b.spin = clamp(p.v / 900, -1, 1);
+  if (Math.abs(b.spin) < 0.15) b.spin = 0;
+  p.flash = 1;
+  burst(b.x, b.y, i === 0 ? C.orange : C.indigo, 6 + Math.min(G.rally, 14));
+  sfx.hit(G.rally, i === 1);
+  if (Math.abs(b.spin) > 0.55) sfx.curve();
+  planCPU(1 - i);
+}
+
+function pointTo(w) {
+  const b = G.ball;
+  burst(clamp(b.x, 10, FW - 10), w === 0 ? 8 : FH - 8, w === 0 ? C.orange : C.indigo, 26);
+  G.ball = null;
+  G.server = 1 - w;   // whoever lost the point serves next
+
+  if (state === 'menu') { setupServe(); G.serveAt = now() + 1; return; }
+
+  G.score[w]++;
+  G.matchRally = Math.max(G.matchRally, G.rally);
+  if (G.rally > load('ping-best-rally', 0)) save('ping-best-rally', G.rally);
+  G.shake = 7;
+  const [a, z] = G.score;
+  G.matchOver = Math.max(a, z) >= WIN && Math.abs(a - z) >= 2;
+  const gamePoint = !G.matchOver && Math.max(a, z) >= WIN - 1 && a !== z;
+  const who = w === 0 ? 'You' : 'CPU';
+  G.banner = {
+    text: G.matchOver ? (w === 0 ? 'You win!' : 'CPU wins!') : gamePoint ? 'Match point' : a === z && a >= WIN - 1 ? 'Deuce' : `Point · ${who}`,
+    t: now(), color: w === 0 ? C.orange : C.indigo,
+  };
+  if (w === 1) sfx.lose(); else sfx.win();
+  state = 'point';
+  G.pointAt = now();
+}
+
+function matchOver() {
+  state = 'over';
+  const w = G.score[0] > G.score[1] ? 0 : 1;
+  if (w === 0) {
+    const wins = load('ping-wins', {});
+    wins[G.diff] = (wins[G.diff] || 0) + 1;
+    save('ping-wins', wins);
+  }
+  sfx.match();
+  showOver(w);
+}
+
+function burst(x, y, color, n) {
+  n = Math.min(n, 300 - G.particles.length);
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * Math.PI * 2, s = 40 + Math.random() * 150;
+    G.particles.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: 0.35 + Math.random() * 0.35, t: 0, color });
+  }
+}
+
+function updateParticles(dt) {
+  for (const p of G.particles) { p.t += dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= 0.96; p.vy *= 0.96; }
+  G.particles = G.particles.filter(p => p.t < p.life);
+}
+
+// ─────────────────────────────────────────────────
+//  CARDS
+// ─────────────────────────────────────────────────
+const overlay = document.getElementById('overlay');
+const card = document.getElementById('card');
+function hideCard() { overlay.classList.add('hidden'); }
+function showCard(html, buttons) {
+  card.innerHTML = html + `<div class="btns">${buttons.map((b, i) =>
+    `<button class="btn ${b.ghost ? 'ghost' : ''}" data-i="${i}">${b.label}</button>`).join('')}</div>`;
+  card.querySelectorAll('.btn').forEach(el => el.addEventListener('click', e => {
+    e.stopPropagation(); ensureAudio(); buttons[+el.dataset.i].run();
+  }));
+  overlay.classList.remove('hidden');
+}
+
+function showMenu() {
+  state = 'menu';
+  G.score = [0, 0];
+  G.banner = null;
+  if (!G.ball) setupServe();
+  const best = load('ping-best-rally', 0), wins = load('ping-wins', {});
+  const total = Object.values(wins).reduce((s, n) => s + n, 0);
+  showCard(`
+    <h1>Pi<em>ng</em></h1>
+    <p class="sub">Table tennis against the CPU. Swipe as you hit to curve the ball. Every hit speeds it up.</p>
+    <div class="seg" id="seg">${Object.keys(DIFF).map(k =>
+      `<button data-k="${k}" class="${k === G.diff ? 'on' : ''}">${DIFF[k].label}</button>`).join('')}</div>
+  `, [
+    { label: 'Play', run: newMatch },
+  ]);
+  card.querySelectorAll('#seg button').forEach(el => el.addEventListener('click', e => {
+    e.stopPropagation();
+    G.diff = el.dataset.k;
+    save('ping-diff', G.diff);
+    card.querySelectorAll('#seg button').forEach(x => x.classList.toggle('on', x === el));
+  }));
+  const stats = [best && `Best rally ${best}`, total && `Wins ${total}`].filter(Boolean).join(' · ');
+  card.insertAdjacentHTML('beforeend', `<p class="hint">Move: mouse, finger or ← → · Serve: tap or space<br>First to ${WIN}, win by 2${stats ? ` · ${stats}` : ''}</p>`);
+}
+
+function showPause() {
+  if (state !== 'playing' && state !== 'serve' && state !== 'point') return;
+  G.pausedFrom = state;
+  state = 'paused';
+  showCard(`<h1>Paused</h1><p class="sub">You ${G.score[0]} – ${G.score[1]} CPU</p>`, [
+    { label: 'Resume', run: resume },
+    { label: 'Quit', ghost: true, run: showMenu },
+  ]);
+}
+function resume() {
+  state = G.pausedFrom || 'serve';
+  if (state === 'serve') G.serveAt = now() + (isCPU(G.server) ? 0.9 : 4);
+  if (state === 'point') G.pointAt = now();
+  hideCard();
+}
+
+function showOver(w) {
+  const title = w === 0 ? 'You <em>win</em>' : 'CPU <em>wins</em>';
+  const sub = `${DIFF[G.diff].label} CPU${w === 0 ? ' beaten.' : '. Try curving your shots.'}`;
+  showCard(`
+    <h1>${title}</h1>
+    <p class="sub">${sub}</p>
+    <div class="lines">
+      <div><span>You – CPU</span><span>${G.score[0]} – ${G.score[1]}</span></div>
+      <div><span>Longest rally</span><span>${G.matchRally}</span></div>
+      <div><span>Best ever</span><span>${load('ping-best-rally', 0)}</span></div>
+    </div>
+  `, [
+    { label: 'Rematch', run: newMatch },
+    { label: 'Menu', ghost: true, run: showMenu },
+  ]);
+}
+
+// ─────────────────────────────────────────────────
+//  INPUT
+// ─────────────────────────────────────────────────
+const keys = { bottom: 0 };
+const held = new Set();
+const live = () => state === 'playing' || state === 'serve' || state === 'point';
+
+function pointerAt(e) { P[0].target = (e.clientX - ox) / scale; }
+window.addEventListener('pointermove', e => { if (live()) pointerAt(e); });
+canvas.addEventListener('pointerdown', e => {
+  ensureAudio();
+  if (!live()) return;
+  pointerAt(e);
+  if (state === 'serve' && G.server === 0) serve();
+});
+
+function syncKeys() {
+  const l = held.has('ArrowLeft'), r = held.has('ArrowRight'), a = held.has('a'), d = held.has('d');
+  keys.bottom = (r || d) - (l || a);
+}
+window.addEventListener('keydown', e => {
+  const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+  held.add(k); syncKeys();
+  if (k === ' ') {
+    e.preventDefault(); ensureAudio();
+    if (state === 'serve' && !isCPU(G.server)) serve();
+    else if (state === 'paused') resume();
+  }
+  if (k === 'p' || k === 'Escape') { if (state === 'paused') resume(); else showPause(); }
+  if (k === 'm') muted = !muted;
+});
+window.addEventListener('keyup', e => {
+  held.delete(e.key.length === 1 ? e.key.toLowerCase() : e.key); syncKeys();
+});
+window.addEventListener('blur', () => { held.clear(); syncKeys(); showPause(); });
+document.addEventListener('visibilitychange', () => { if (document.hidden) showPause(); });
+
+// ─────────────────────────────────────────────────
+//  DRAW
+// ─────────────────────────────────────────────────
+function rrect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.roundRect ? ctx.roundRect(x, y, w, h, r) : ctx.rect(x, y, w, h);
+}
+
+function draw() {
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.fillStyle = C.bg;
+  ctx.fillRect(0, 0, W, H);
+
+  const shake = G.shake > 0 ? (Math.random() - 0.5) * G.shake : 0;
+  ctx.setTransform(DPR * scale, 0, 0, DPR * scale, DPR * (ox + shake), DPR * oy);
+
+  ctx.fillStyle = 'rgba(255,255,255,0.03)';
+  rrect(0, 0, FW, FH, 18); ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.save();
+  rrect(0, 0, FW, FH, 18); ctx.clip();
+
+  drawTable();
+  drawScores();
+  drawPaddle(0, C.orange);
+  drawPaddle(1, C.indigo);
+  drawBall();
+  drawParticles();
+  drawBanner();
+  drawServeHint();
+  ctx.restore();
+}
+
+function drawTable() {
+  // Halves tinted toward each side's color, a dashed net and a center line.
+  const g = ctx.createLinearGradient(0, 0, 0, FH);
+  g.addColorStop(0, 'rgba(99,102,241,0.07)');
+  g.addColorStop(0.5, 'rgba(255,255,255,0)');
+  g.addColorStop(1, 'rgba(200,87,46,0.07)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, FW, FH);
+
+  ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(FW / 2, 24); ctx.lineTo(FW / 2, FH - 24); ctx.stroke();
+
+  ctx.strokeStyle = 'rgba(255,255,255,0.22)';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([8, 8]);
+  ctx.beginPath(); ctx.moveTo(10, FH / 2); ctx.lineTo(FW - 10, FH / 2); ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+function drawScores() {
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = 'italic 400 120px Fraunces, Georgia, serif';
+  ctx.fillStyle = 'rgba(249,250,251,0.07)';
+  ctx.fillText(G.score[0], FW / 2, FH * 0.73);
+  ctx.fillText(G.score[1], FW / 2, FH * 0.27);
+
+  if (state === 'menu') return;
+  ctx.font = '600 10px "Space Grotesk", sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillStyle = C.orange;
+  ctx.fillText('YOU', 14, FH / 2 + 16);
+  ctx.fillStyle = C.indigo;
+  ctx.fillText('CPU', 14, FH / 2 - 16);
+
+  if (G.rally >= 2) {
+    ctx.textAlign = 'right';
+    ctx.fillStyle = G.rally >= 10 ? C.yellow : C.muted;
+    ctx.fillText(`RALLY ${G.rally}`, FW - 14, FH / 2 + 16);
+  }
+}
+
+function drawPaddle(i, color) {
+  const p = P[i];
+  const g = ctx.createLinearGradient(0, p.y, 0, p.y + PH);
+  g.addColorStop(0, C.white); g.addColorStop(1, '#C9CBD6');
+  ctx.shadowColor = color;
+  ctx.shadowBlur = 12 + p.flash * 18;
+  ctx.fillStyle = g;
+  rrect(p.x - PW / 2, p.y, PW, PH, PH / 2); ctx.fill();
+  ctx.shadowBlur = 0;
+  // A colored stripe on the side that faces the net.
+  ctx.fillStyle = color;
+  rrect(p.x - PW / 2 + 6, i === 0 ? p.y : p.y + PH - 3, PW - 12, 3, 1.5); ctx.fill();
+}
+
+function drawBall() {
+  const b = G.ball;
+  if (!b) return;
+  const spin = Math.abs(b.spin);
+  const col = spin > 0.15 ? C.yellow : C.white;
+  for (let i = 0; i < b.trail.length; i++) {
+    const [tx, ty] = b.trail[i], k = (i + 1) / b.trail.length;
+    ctx.globalAlpha = 0.28 * k;
+    ctx.fillStyle = col;
+    ctx.beginPath(); ctx.arc(tx, ty, R * k, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  ctx.shadowColor = spin > 0.15 ? C.yellow : 'rgba(255,255,255,0.8)';
+  ctx.shadowBlur = 8 + spin * 12;
+  ctx.fillStyle = spin > 0.15 ? '#FBE3A6' : C.white;
+  ctx.beginPath(); ctx.arc(b.x, b.y, R, 0, Math.PI * 2); ctx.fill();
+  ctx.shadowBlur = 0;
+}
+
+function drawParticles() {
+  for (const p of G.particles) {
+    ctx.globalAlpha = 1 - p.t / p.life;
+    ctx.fillStyle = p.color;
+    ctx.fillRect(p.x - 2, p.y - 2, 4, 4);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawBanner() {
+  const b = G.banner;
+  if (!b) return;
+  const age = now() - b.t;
+  if (age > 1.4) { G.banner = null; return; }
+  const y = FH * 0.6 - age * 12;
+  ctx.save();
+  ctx.globalAlpha = Math.min(1, (1.4 - age) / 0.4, age / 0.12);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = 'italic 400 30px Fraunces, Georgia, serif';
+  ctx.fillStyle = b.color || C.white;
+  ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = 8;
+  ctx.fillText(b.text, FW / 2, y);
+  ctx.restore();
+}
+
+function drawServeHint() {
+  if (state !== 'serve' || G.server !== 0) return;
+  const y = BOT_Y + PH + 30;
+  ctx.save();
+  ctx.fillStyle = 'rgba(249,250,251,0.75)';
+  ctx.font = '500 13px "Space Grotesk", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('Tap, click or press space to serve', FW / 2, y);
+  ctx.restore();
+}
+
+// ─────────────────────────────────────────────────
+//  LOOP
+// ─────────────────────────────────────────────────
+let last = 0;
+function frame(ms) {
+  const t = ms / 1000;
+  const dt = last ? Math.min(t - last, 1 / 30) : 1 / 60;
+  last = t;
+  update(dt);
+  draw();
+  requestAnimationFrame(frame);
+}
+
+// Two CPUs rally behind the menu.
+G.server = 0;
+setupServe();
+showMenu();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

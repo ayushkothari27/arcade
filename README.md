@@ -5,6 +5,7 @@ Small browser games, each a self-contained single HTML file with a shared dark t
 | Game | Path | Description |
 |------|------|-------------|
 | **Shatter** | `shatter/` | Brick breaker: pop pixel-art pictures made of dots, multiply your balls, endless levels |
+| **Ping** | `ping/` | Table tennis vs the CPU: swipe as you hit to curve the ball, rallies speed up |
 | **Corral** | `corral/` | Fence-building arcade game: pen in bouncing sparks |
 | **Forehead** | `forehead/` | Party guessing game: phone on your forehead, friends describe the footballer, tilt to score |
 | **Flaggle** | `flaggle/` | Daily flag-guessing puzzle (Wordle-style) |
