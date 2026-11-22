@@ -151,11 +151,12 @@ const C = {
 };
 
 // speed: max paddle speed · react: seconds before it reads a shot · err: how far off it aims
-// (grows with rally speed) · aim: how much it angles shots · read: how well it reads spin
+// (grows with rally speed) · aim: how much it angles shots · smart: chance it aims away from you
+// · read: how well it reads spin · spin: how much curve it puts on its own shots
 const DIFF = {
-  easy:   { label: 'Easy',   speed: 220, react: 0.38, err: 34, aim: 0.15, read: 0 },
-  normal: { label: 'Normal', speed: 320, react: 0.24, err: 20, aim: 0.4,  read: 0.45 },
-  hard:   { label: 'Hard',   speed: 440, react: 0.13, err: 10, aim: 0.7,  read: 0.85 },
+  easy:   { label: 'Easy',   speed: 130, react: 0.45, err: 55, aim: 0.15, smart: 0,    read: 0,    spin: 0 },
+  normal: { label: 'Normal', speed: 210, react: 0.3,  err: 37, aim: 0.4,  smart: 0.25, read: 0.45, spin: 0.2 },
+  hard:   { label: 'Hard',   speed: 380, react: 0.12, err: 16, aim: 0.8,  smart: 0.8,  read: 1,    spin: 0.6 },
 };
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -220,7 +221,7 @@ function save(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch 
 //  STATE
 // ─────────────────────────────────────────────────
 let state = 'menu';   // menu | serve | playing | point | paused | over
-const newPaddle = y => ({ x: FW / 2, target: FW / 2, v: 0, y, flash: 0, pred: FW / 2, err: 0, aim: 0, think: 0 });
+const newPaddle = y => ({ x: FW / 2, target: FW / 2, v: 0, y, flash: 0, pred: FW / 2, err: 0, aim: 0, think: 0, wait: 0 });
 const P = [newPaddle(BOT_Y), newPaddle(TOP_Y)];   // 0 = bottom, 1 = top
 const G = {
   diff: load('ping-diff', 'normal'),
@@ -322,7 +323,7 @@ function updateCPU(i, dt) {
   const coming = b && !b.stuck && (i === 0 ? b.vy > 0 : b.vy < 0);
   if (b && b.stuck && G.server === i) {
     tx = p.pred;
-  } else if (coming && now() < p.think) {
+  } else if (coming && now() < p.wait) {
     tx = p.x;   // still reacting: hold position
   } else if (coming) {
     if (now() > p.think) {
@@ -340,15 +341,23 @@ function updateCPU(i, dt) {
   p.v = p.v * 0.7 + (step / dt) * 0.3;
 }
 
-// Where the ball will cross paddle i's line, bouncing off the side walls.
+// Where the ball will cross paddle i's line. Runs the ball's own physics forward
+// (walls, curve, spin decay); `read` is how much of the spin the CPU notices.
 function predictX(b, i, read) {
   const y = i === 0 ? BOT_Y - R : TOP_Y + PH + R;
-  const t = Math.max(0, (y - b.y) / b.vy);
-  let x = b.x + b.vx * t + 0.5 * b.spin * CURVE * t * t * read * 0.6;
-  const span = FW - 2 * R;
-  let u = ((x - R) % (2 * span) + 2 * span) % (2 * span);
-  if (u > span) u = 2 * span - u;
-  return R + u;
+  const s = speedFor(G.rally), minVy = s * 0.42, h = 1 / 120;
+  let x = b.x, by = b.y, vx = b.vx, vy = b.vy, spin = b.spin * read;
+  for (let n = 0; n < 600 && (i === 0 ? by < y : by > y); n++) {
+    vx += spin * CURVE * h;
+    x += vx * h; by += vy * h;
+    if (x < R) { x = R; vx = Math.abs(vx); spin *= 0.3; }
+    if (x > FW - R) { x = FW - R; vx = -Math.abs(vx); spin *= 0.3; }
+    spin *= Math.exp(-h * 0.9);
+    const cur = Math.hypot(vx, vy) || 1;
+    vx *= s / cur; vy *= s / cur;
+    if (Math.abs(vy) < minVy) { vy = Math.sign(vy) * minVy; vx = Math.sign(vx || 1) * Math.sqrt(s * s - minVy * minVy); }
+  }
+  return x;
 }
 
 // Picks a fresh aiming error and shot angle for a CPU paddle about to receive.
@@ -357,7 +366,16 @@ function planCPU(i) {
   const d = skill(), p = P[i];
   p.err = (Math.random() * 2 - 1) * d.err * (1 + G.rally * 0.12);
   p.aim = (Math.random() * 2 - 1) * d.aim * PW / 2;
-  p.think = now() + d.react * (0.7 + Math.random() * 0.6);
+  // Sometimes aim deliberately at the side the opponent is not on.
+  if (Math.random() < d.smart) {
+    const away = P[1 - i].x < FW / 2 ? 1 : -1;
+    p.aim = away * (0.45 + Math.random() * 0.55) * d.aim * PW / 2;
+  }
+  // Angle the shot, but keep the planned contact point on the paddle.
+  const room = PW / 2 - 4;
+  if (Math.abs(p.aim) + Math.abs(p.err) > room) p.aim = Math.sign(p.aim) * Math.max(0, room - Math.abs(p.err));
+  p.wait = now() + d.react * (0.7 + Math.random() * 0.6);
+  p.think = 0;
 }
 
 function moveBall(b, dt) {
@@ -410,6 +428,7 @@ function hitPaddle(b, i) {
   b.y = i === 0 ? BOT_Y - R : TOP_Y + PH + R;
   // Swiping the paddle through the hit puts spin on the ball.
   b.spin = clamp(p.v / 900, -1, 1);
+  if (isCPU(i)) b.spin = clamp(b.spin + (Math.random() * 2 - 1) * skill().spin, -1, 1);
   if (Math.abs(b.spin) < 0.15) b.spin = 0;
   p.flash = 1;
   burst(b.x, b.y, i === 0 ? C.orange : C.indigo, 6 + Math.min(G.rally, 14));
