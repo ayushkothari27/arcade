@@ -290,9 +290,13 @@ function updateHuman(i, dt) {
   const p = P[i];
   p.target += keys.bottom * 600 * Math.sqrt(pace()) * dt;
   p.target = clamp(p.target, PW / 2 + 4, FW - PW / 2 - 4);
-  const prev = p.x;
-  p.x += (p.target - p.x) * Math.min(1, dt * 24);
-  p.v = p.v * 0.7 + ((p.x - prev) / dt) * 0.3;
+  // Glide toward the pointer on a critically damped spring: eases in and out, no overshoot.
+  const smooth = 0.08, maxV = 1500;
+  const w = 2 / smooth, x = w * dt, ease = 1 / (1 + x + 0.48 * x * x + 0.235 * x * x * x);
+  const change = clamp(p.x - p.target, -maxV * smooth, maxV * smooth);
+  const temp = (p.v + w * change) * dt;
+  p.v = (p.v - w * temp) * ease;
+  p.x = clamp(p.x - change + (change + temp) * ease, PW / 2 + 4, FW - PW / 2 - 4);
 }
 
 function updateCPU(i, dt) {
