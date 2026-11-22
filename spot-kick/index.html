@@ -140,9 +140,11 @@ const C = {
 
 // Keeper: how fast the gloves travel (goal widths per second), how far they reach,
 // and for the CPU keeper how often it reads your shot and how long it takes to react.
-const KEEPER = { speed: 2.1, reach: 0.15, body: 0.11 };
+const KEEPER = { speed: 2.1, reach: 0.15, body: 0.11 };   // the CPU in goal
+const YOU_KEEPER = { speed: 2.4, reach: 0.17, body: 0.12 }; // you in goal: a bit quicker, so reactions can win
 const CPU_KEEPER = { read: 0.3, react: 0.12, stay: 0.12 };
-const CPU_SHOOTER = { noise: 0.09, punishEarly: 0.6 };
+const CPU_SHOOTER = { noise: 0.09, punishEarly: 0.4 };
+const keeperStats = () => G.turn === 'cpu' ? YOU_KEEPER : KEEPER;
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const lerp = (a, b, t) => a + (b - a) * t;
@@ -258,7 +260,7 @@ function nextKick() {
 // A shot aims at (gx, gy). Curl bends its path; `aimX` is where it looked like it was
 // going when struck, which is what a keeper reads.
 function strike({ gx, gy, power, curl, aimX }) {
-  const flight = lerp(0.85, 0.46, power);
+  const flight = G.turn === 'cpu' ? lerp(0.9, 0.55, power) : lerp(0.85, 0.46, power);
   G.shot = { gx, gy, power, curl, aimX, t0: now(), flight, done: false, after: null };
   state = 'flight';
   sfx.kick();
@@ -316,7 +318,7 @@ function updateKeeper(k, dt) {
   if (!k) return;
   if (k.diving && now() >= k.diveAt) {
     const dx = k.tx - k.hx, dy = (k.ty - k.hy) * GOAL.h / GOAL.half;
-    const d = Math.hypot(dx, dy), step = KEEPER.speed * dt;
+    const d = Math.hypot(dx, dy), step = keeperStats().speed * dt;
     if (d > step) { k.hx += dx / d * step; k.hy += dy / d * step * GOAL.half / GOAL.h; }
     else { k.hx = k.tx; k.hy = k.ty; }
     k.x = lerp(k.x, k.hx * 0.55, Math.min(1, dt * 10));
@@ -343,8 +345,8 @@ function judge(s) {
   if (s.gy > 1.05 || ax > 1.05) outcome = s.gy > 1.05 && ax <= 1.05 ? 'over' : 'wide';
   else if (ax > 0.95) outcome = 'post';
   else if (s.gy > 0.95) outcome = 'bar';
-  else if (gdist(k.hx, k.hy, s.gx, s.gy) < KEEPER.reach ||
-           (Math.abs(s.gx - k.x) < KEEPER.body && s.gy < 0.8)) outcome = 'save';
+  else if (gdist(k.hx, k.hy, s.gx, s.gy) < keeperStats().reach ||
+           (Math.abs(s.gx - k.x) < keeperStats().body && s.gy < 0.8)) outcome = 'save';
   else outcome = 'goal';
 
   const scored = outcome === 'goal';
@@ -450,16 +452,23 @@ canvas.addEventListener('pointerup', e => {
 canvas.addEventListener('pointercancel', () => { G.swipe = null; G.trail = []; });
 
 /**
- * Turns a swipe into a shot. Direction (extended to the goal line) picks left/right,
- * length picks height, speed picks power (more power, less accuracy), and how much the
- * swipe bends picks the curl.
+ * Turns a swipe into a shot. Swipe onto the goal and the ball goes where your finger
+ * ended; a short flick keeps its direction and rises with how hard it was. Speed sets
+ * power (more power, less accuracy), and how much the swipe bends sets the curl.
  */
 function shootFromSwipe(pts, dx, dy, L, dur) {
-  const xAtLine = SPOT.x + dx / -dy * (SPOT.y - GOAL.line);
-  const aimX = (xAtLine - GOAL.cx) / GOAL.half;
+  const [ex, ey] = pts[pts.length - 1];
   const speed = L / dur;
   const power = clamp((speed - 350) / 1500, 0, 1);
-  let gy = clamp((L - 70) / 260, 0, 1.4) + power * 0.12;
+  let aimX, gy;
+  if (ey <= GOAL.line + 10) {
+    aimX = (ex - GOAL.cx) / GOAL.half;
+    gy = (GOAL.line - ey) / GOAL.h + power * 0.05;
+  } else {
+    const xAtLine = SPOT.x + dx / -dy * (SPOT.y - GOAL.line);
+    aimX = (xAtLine - GOAL.cx) / GOAL.half;
+    gy = 0.1 + power * 0.65;
+  }
 
   // Curl: how far the swipe bows away from its straight chord (+ = bowed right). The
   // ball bows the same way and still lands where the chord points, but it sets off
@@ -530,7 +539,7 @@ function showMenu() {
     <h1>Spot <em>Kick</em></h1>
     <p class="sub">A penalty shootout against the CPU. Five kicks each, then sudden death.</p>
     <div class="rules">
-      <div>${dot(C.yellow)}<span><b>Shoot:</b> swipe from the ball toward the goal. Longer goes higher, faster hits harder but less accurately.</span></div>
+      <div>${dot(C.yellow)}<span><b>Shoot:</b> swipe from the ball to the spot you want in the goal. Faster hits harder but less accurately.</span></div>
       <div>${dot(C.orange)}<span><b>Curl it:</b> bend your swipe. The keeper reads where you started aiming.</span></div>
       <div>${dot(C.indigo)}<span><b>Save:</b> tap where to dive. Go early to guess, but a shooter who sees you move will go the other way.</span></div>
     </div>
@@ -795,8 +804,8 @@ function drawBanner() {
 
 function drawPrompt() {
   let text = null;
-  if (state === 'aim' && !G.swipe) text = 'Swipe from the ball to shoot';
-  else if (state === 'runup' && !G.keeper.diving) text = 'You’re in goal: tap where to dive';
+  if (state === 'aim' && !G.swipe) text = 'Swipe from the ball to a spot in the goal';
+  else if (state === 'runup' && !G.keeper.diving) text = 'You’re in goal: tap where the ball is going';
   if (!text) return;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
