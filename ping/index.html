@@ -123,7 +123,7 @@ const FW = 400, FH = 680;
 const PW = 84, PH = 12, R = 7;
 const BOT_Y = FH - 64;          // bottom paddle's top edge
 const TOP_Y = 64 - PH;          // top paddle's top edge
-const BASE_SPEED = 300;
+const BASE_SPEED = 280;
 const CURVE = 240;              // sideways pull of full spin, px/s²
 const WIN = 7;                  // first to 7, win by 2
 
@@ -136,12 +136,12 @@ const C = {
 // before it reads a shot · err: how far off it aims, scaled up by errGrow as the ball speeds up · aim: how much
 // it angles shots · smart: chance it aims away from you · read: how well it reads spin
 // · spin: how much curve it puts on its own shots
-const CPU = { speed: 380, react: 0.2, err: 16, errGrow: 2.6, aim: 0.5, smart: 0.35, read: 0.6, spin: 0.3 };
+const CPU = { speed: 310, react: 0.26, err: 26, errGrow: 4, aim: 0.5, smart: 0.35, read: 0.6, spin: 0.3 };
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const now = () => performance.now() / 1000;
-// Climbs quickly early in a rally, then keeps creeping toward ~640 with no flat cap.
-const speedFor = rally => BASE_SPEED + 340 * (1 - Math.exp(-rally / 12));
+// Climbs quickly early in a rally, then keeps creeping toward ~540 with no flat cap.
+const speedFor = rally => BASE_SPEED + 260 * (1 - Math.exp(-rally / 14));
 const pace = () => speedFor(G.rally) / BASE_SPEED;   // 1 at serve speed
 
 // ─────────────────────────────────────────────────
