@@ -88,24 +88,6 @@
     .card h1 em { font-style: italic; font-weight: 400; color: var(--yellow); }
     .sub { color: var(--muted); font-size: 0.88rem; margin-bottom: 1.2rem; line-height: 1.4; }
 
-    .seg {
-      display: inline-flex;
-      padding: 3px;
-      margin: 0 0 1.2rem;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 999px;
-    }
-    .seg button {
-      padding: 0.45rem 0.95rem;
-      border: none;
-      border-radius: 999px;
-      background: transparent;
-      color: var(--muted);
-      font: inherit; font-size: 0.82rem; font-weight: 600;
-      cursor: pointer;
-    }
-    .seg button.on { background: rgba(255,255,255,0.12); color: var(--text); }
 
     .lines { display: grid; gap: 0.35rem; margin: 0 0 1.2rem; font-size: 0.9rem; }
     .lines div { display: flex; justify-content: space-between; color: var(--muted); }
@@ -150,18 +132,17 @@ const C = {
   pink: '#B85C8A', muted: '#9CA3AF', white: '#F9FAFB',
 };
 
-// speed: max paddle speed · react: seconds before it reads a shot · err: how far off it aims
-// (grows with rally speed) · aim: how much it angles shots · smart: chance it aims away from you
-// · read: how well it reads spin · spin: how much curve it puts on its own shots
-const DIFF = {
-  easy:   { label: 'Easy',   speed: 130, react: 0.45, err: 55, aim: 0.15, smart: 0,    read: 0,    spin: 0 },
-  normal: { label: 'Normal', speed: 210, react: 0.3,  err: 37, aim: 0.4,  smart: 0.25, read: 0.45, spin: 0.2 },
-  hard:   { label: 'Hard',   speed: 380, react: 0.12, err: 16, aim: 0.8,  smart: 0.8,  read: 1,    spin: 0.6 },
-};
+// The CPU. speed: paddle speed at serve pace (it speeds up with the ball) · react: seconds
+// before it reads a shot · err: how far off it aims, scaled up by errGrow as the ball speeds up · aim: how much
+// it angles shots · smart: chance it aims away from you · read: how well it reads spin
+// · spin: how much curve it puts on its own shots
+const CPU = { speed: 380, react: 0.12, err: 16, errGrow: 2.6, aim: 0.8, smart: 0.8, read: 1, spin: 0.6 };
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const now = () => performance.now() / 1000;
-const speedFor = rally => BASE_SPEED * (1 + Math.min(0.9, rally * 0.045));
+// Climbs quickly early in a rally, then keeps creeping toward ~640 with no flat cap.
+const speedFor = rally => BASE_SPEED + 340 * (1 - Math.exp(-rally / 12));
+const pace = () => speedFor(G.rally) / BASE_SPEED;   // 1 at serve speed
 
 // ─────────────────────────────────────────────────
 //  CANVAS
@@ -224,15 +205,12 @@ let state = 'menu';   // menu | serve | playing | point | paused | over
 const newPaddle = y => ({ x: FW / 2, target: FW / 2, v: 0, y, flash: 0, pred: FW / 2, err: 0, aim: 0, think: 0, wait: 0 });
 const P = [newPaddle(BOT_Y), newPaddle(TOP_Y)];   // 0 = bottom, 1 = top
 const G = {
-  diff: load('ping-diff', 'normal'),
   score: [0, 0], server: 0, rally: 0, matchRally: 0,
   ball: null, particles: [], banner: null, shake: 0,
   serveAt: 0, pointAt: 0, matchOver: false,
 };
-if (!DIFF[G.diff]) G.diff = 'normal';
 
 const isCPU = i => state === 'menu' || i === 1;
-const skill = () => DIFF[state === 'menu' ? 'normal' : G.diff];
 
 function newMatch() {
   G.score = [0, 0];
@@ -310,7 +288,7 @@ function update(dt) {
 
 function updateHuman(i, dt) {
   const p = P[i];
-  p.target += keys.bottom * 600 * dt;
+  p.target += keys.bottom * 600 * Math.sqrt(pace()) * dt;
   p.target = clamp(p.target, PW / 2 + 4, FW - PW / 2 - 4);
   const prev = p.x;
   p.x += (p.target - p.x) * Math.min(1, dt * 24);
@@ -318,7 +296,7 @@ function updateHuman(i, dt) {
 }
 
 function updateCPU(i, dt) {
-  const p = P[i], d = skill(), b = G.ball;
+  const p = P[i], d = CPU, b = G.ball;
   let tx = FW / 2;
   const coming = b && !b.stuck && (i === 0 ? b.vy > 0 : b.vy < 0);
   if (b && b.stuck && G.server === i) {
@@ -335,7 +313,8 @@ function updateCPU(i, dt) {
     tx = FW / 2 + (b.x - FW / 2) * 0.35;   // drift back toward the middle
   }
   tx = clamp(tx, PW / 2 + 4, FW - PW / 2 - 4);
-  const step = clamp(tx - p.x, -d.speed * dt, d.speed * dt);
+  const max = d.speed * (1 + 0.6 * (pace() - 1)) * dt;
+  const step = clamp(tx - p.x, -max, max);
   p.x += step;
   p.target = p.x;
   p.v = p.v * 0.7 + (step / dt) * 0.3;
@@ -363,8 +342,8 @@ function predictX(b, i, read) {
 // Picks a fresh aiming error and shot angle for a CPU paddle about to receive.
 function planCPU(i) {
   if (!isCPU(i)) return;
-  const d = skill(), p = P[i];
-  p.err = (Math.random() * 2 - 1) * d.err * (1 + G.rally * 0.12);
+  const d = CPU, p = P[i];
+  p.err = (Math.random() * 2 - 1) * d.err * (1 + d.errGrow * (pace() - 1));
   p.aim = (Math.random() * 2 - 1) * d.aim * PW / 2;
   // Sometimes aim deliberately at the side the opponent is not on.
   if (Math.random() < d.smart) {
@@ -428,7 +407,7 @@ function hitPaddle(b, i) {
   b.y = i === 0 ? BOT_Y - R : TOP_Y + PH + R;
   // Swiping the paddle through the hit puts spin on the ball.
   b.spin = clamp(p.v / 900, -1, 1);
-  if (isCPU(i)) b.spin = clamp(b.spin + (Math.random() * 2 - 1) * skill().spin, -1, 1);
+  if (isCPU(i)) b.spin = clamp(b.spin + (Math.random() * 2 - 1) * CPU.spin, -1, 1);
   if (Math.abs(b.spin) < 0.15) b.spin = 0;
   p.flash = 1;
   burst(b.x, b.y, i === 0 ? C.orange : C.indigo, 6 + Math.min(G.rally, 14));
@@ -462,13 +441,16 @@ function pointTo(w) {
   G.pointAt = now();
 }
 
+function totalWins() {
+  const w = load('ping-wins', 0);   // older versions stored wins per difficulty
+  return typeof w === 'number' ? w : Object.values(w || {}).reduce((s, n) => s + (+n || 0), 0);
+}
+
 function matchOver() {
   state = 'over';
   const w = G.score[0] > G.score[1] ? 0 : 1;
   if (w === 0) {
-    const wins = load('ping-wins', {});
-    wins[G.diff] = (wins[G.diff] || 0) + 1;
-    save('ping-wins', wins);
+    save('ping-wins', totalWins() + 1);
   }
   sfx.match();
   showOver(w);
@@ -507,22 +489,13 @@ function showMenu() {
   G.score = [0, 0];
   G.banner = null;
   if (!G.ball) setupServe();
-  const best = load('ping-best-rally', 0), wins = load('ping-wins', {});
-  const total = Object.values(wins).reduce((s, n) => s + n, 0);
+  const best = load('ping-best-rally', 0), total = totalWins();
   showCard(`
     <h1>Pi<em>ng</em></h1>
     <p class="sub">Table tennis against the CPU. Swipe as you hit to curve the ball. Every hit speeds it up.</p>
-    <div class="seg" id="seg">${Object.keys(DIFF).map(k =>
-      `<button data-k="${k}" class="${k === G.diff ? 'on' : ''}">${DIFF[k].label}</button>`).join('')}</div>
   `, [
     { label: 'Play', run: newMatch },
   ]);
-  card.querySelectorAll('#seg button').forEach(el => el.addEventListener('click', e => {
-    e.stopPropagation();
-    G.diff = el.dataset.k;
-    save('ping-diff', G.diff);
-    card.querySelectorAll('#seg button').forEach(x => x.classList.toggle('on', x === el));
-  }));
   const stats = [best && `Best rally ${best}`, total && `Wins ${total}`].filter(Boolean).join(' · ');
   card.insertAdjacentHTML('beforeend', `<p class="hint">Move: mouse, finger or ← → · Serve: tap or space<br>First to ${WIN}, win by 2${stats ? ` · ${stats}` : ''}</p>`);
 }
@@ -545,7 +518,7 @@ function resume() {
 
 function showOver(w) {
   const title = w === 0 ? 'You <em>win</em>' : 'CPU <em>wins</em>';
-  const sub = `${DIFF[G.diff].label} CPU${w === 0 ? ' beaten.' : '. Try curving your shots.'}`;
+  const sub = w === 0 ? 'The CPU is beaten.' : 'Try curving your shots past it.';
   showCard(`
     <h1>${title}</h1>
     <p class="sub">${sub}</p>
