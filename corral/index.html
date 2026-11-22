@@ -223,8 +223,9 @@ const TYPES = {
 // ─────────────────────────────────────────────────
 //  LEVELS
 // ─────────────────────────────────────────────────
-// Every field has exactly three sparks. Difficulty comes from which sparks they are,
-// how fast they move, how slowly your fence grows, and how much you must claim.
+// Every field asks you to claim 85%. Difficulty comes from how many sparks there are
+// (3 on Easy up to 6 on Expert), their mix of slow, medium and fast types, how fast they
+// move, and how slowly your fence grows.
 const TIERS = [
   { name: 'Easy',   from: 1,  to: 6,  color: C.green },
   { name: 'Medium', from: 7,  to: 12, color: C.yellow },
@@ -233,17 +234,18 @@ const TIERS = [
 ];
 const tierOf = n => TIERS.find(t => n >= t.from && n <= t.to) || TIERS[TIERS.length - 1];
 
-// [first field, spark mix]: tougher types replace embers as you climb.
+// [first field, spark mix]. Boulders are slow, Embers medium, Darts fast; Ghosts fade
+// out of sight. Each tier adds a spark.
 const MIXES = [
   [1,  ['ember', 'ember', 'ember']],
-  [4,  ['ember', 'ember', 'dart']],
-  [7,  ['ember', 'dart', 'boulder']],
-  [9,  ['ember', 'boulder', 'ghost']],
-  [11, ['ember', 'dart', 'ghost']],
-  [13, ['dart', 'boulder', 'ghost']],
-  [17, ['dart', 'dart', 'ghost']],
-  [21, ['dart', 'ghost', 'ghost']],
-  [26, ['dart', 'dart', 'ghost']],
+  [4,  ['boulder', 'ember', 'dart']],
+  [7,  ['boulder', 'ember', 'ember', 'dart']],
+  [9,  ['boulder', 'ember', 'dart', 'ghost']],
+  [11, ['ember', 'ember', 'dart', 'ghost']],
+  [13, ['boulder', 'boulder', 'ember', 'dart', 'ghost']],
+  [17, ['boulder', 'ember', 'dart', 'dart', 'ghost']],
+  [21, ['boulder', 'boulder', 'ember', 'dart', 'dart', 'ghost']],
+  [26, ['boulder', 'ember', 'dart', 'dart', 'ghost', 'ghost']],
 ];
 
 function levelSpec(n) {
@@ -252,10 +254,10 @@ function levelSpec(n) {
   for (const [from, mix] of MIXES) if (n >= from) types = mix;
   return {
     types,
-    speed: 1 + 0.45 * t,                                  // spark speed multiplier
-    fence: 20 - 5 * t,                                    // fence growth, cells per second per arm
-    target: Math.round((0.75 + 0.15 * t) * 100) / 100,    // share of the field to claim
-    capture: 0.045 - 0.02 * t,                            // pens this small capture the sparks inside
+    speed: 1 + 0.3 * t,           // spark speed multiplier
+    fence: 20 - 4 * t,            // fence growth, cells per second per arm
+    target: 0.85,                 // share of the field to claim
+    capture: 0.045 - 0.015 * t,   // pens this small capture the sparks inside
   };
 }
 
@@ -376,7 +378,7 @@ function newLevel() {
       type, r: t.r,
       x: rand(3, G.cols - 3), y: rand(3, G.rows - 3),
       vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
-      trail: [],
+      trail: [], phase: rand(0, 4),
     };
   });
 
@@ -391,7 +393,7 @@ function newLevel() {
 //  FENCES
 // ─────────────────────────────────────────────────
 // A fence starts in one cell and grows two arms in opposite directions.
-// A spark touching a growing arm snaps it (ghosts slip through instead).
+// A spark touching a growing arm snaps it, Ghosts included, even while they're out of sight.
 // A finished arm turns solid; when both arms are settled, empty pens fill in.
 function startFence(cx, cy, orient) {
   if (state !== 'playing' || G.fence) return;
@@ -448,7 +450,6 @@ function updateFence(dt) {
     // Snap check.
     const rc = armRect(f, arm);
     for (const s of G.sparks) {
-      if (TYPES[s.type].ghost) continue;
       if (circleHitsRect(s.x, s.y, s.r, rc)) {
         arm.alive = false;
         loseHeart(f.x + 0.5 + f.dx * arm.dir * arm.n * 0.5, f.y + 0.5 + f.dy * arm.dir * arm.n * 0.5);
@@ -634,7 +635,7 @@ function showMenu() {
       <div>${dot(C.yellow)}<span><b>Swipe or drag</b> to build a fence that way. A plain click or tap uses <b>↔ / ↕</b> (space or right-click flips it).</span></div>
       <div>${dot(C.green)}<span>Pens with no sparks fill in. Claim enough of the field to clear it.</span></div>
       <div>${dot(C.orange)}<span>Trap sparks in a <b>tiny pen</b> to corral them for big points.</span></div>
-      <div>${dot(C.pink)}<span>Later fields bring faster sparks, slower fences and Ghosts that slip through growing fences.</span></div>
+      <div>${dot(C.pink)}<span>Harder fields bring more sparks, slower fences and Ghosts that fade out of sight but still snap fences.</span></div>
     </div>
     ${levelsHTML()}
     <button class="btn">Play field ${pickedLevel}</button>
@@ -724,8 +725,9 @@ function nextNote(n) {
   const tier = tierOf(n), prevTier = tierOf(n - 1);
   const parts = [];
   if (tier.name !== prevTier.name) parts.push(`${tier.name} tier`);
+  if (b.types.length > a.types.length) parts.push(`${b.types.length} sparks`);
   for (const t of added) parts.push(`${TYPES[t].name} ${seen.has(t) ? 'returns' : 'joins'}`);
-  parts.push(`claim ${Math.round(b.target * 100)}%`);
+  if (parts.length === (tier.name !== prevTier.name ? 1 : 0)) parts.push('a little faster');
   return `field ${n} · ${parts.join(' · ')}`;
 }
 
@@ -903,11 +905,20 @@ function drawFence(t) {
   ctx.restore();
 }
 
+/** Ghosts cycle: seen for 2s, fade out, unseen for 1s, fade back in. */
+function ghostAlpha(s, t) {
+  const p = (t + (s.phase || 0)) % 4;
+  if (p < 2) return 1;
+  if (p < 2.5) return 1 - (p - 2) / 0.5 * 0.96;
+  if (p < 3.5) return 0.04;
+  return 0.04 + (p - 3.5) / 0.5 * 0.96;
+}
+
 function drawSparks(t) {
   for (const s of G.sparks) {
     const type = TYPES[s.type];
     const px = ox + s.x * cell, py = oy + s.y * cell, r = s.r * cell;
-    const alpha = type.ghost ? 0.45 + 0.25 * Math.sin(t * 6 + s.x) : 1;
+    const alpha = type.ghost ? ghostAlpha(s, t) : 1;
 
     // Trail.
     for (let i = 0; i < s.trail.length; i++) {
