@@ -133,6 +133,7 @@ const toScreen = (gx, gy) => [GOAL.cx + gx * GOAL.half, GOAL.line - gy * GOAL.h]
 const gdist = (ax, ay, bx, by) => Math.hypot(ax - bx, (ay - by) * GOAL.h / GOAL.half);
 
 const KICKS = 5;   // regulation kicks each, then sudden death
+const RUNUP = 1.3; // seconds the CPU shooter takes to run up: time to read the lean
 const C = {
   bg: '#1A1A2E', orange: '#C8572E', yellow: '#C99A30', green: '#3A8F72', indigo: '#6366F1',
   pink: '#B85C8A', muted: '#9CA3AF', white: '#F9FAFB', red: '#D9534F',
@@ -143,7 +144,7 @@ const C = {
 const KEEPER = { speed: 2.1, reach: 0.15, body: 0.11 };   // the CPU in goal
 const YOU_KEEPER = { speed: 2.4, reach: 0.17, body: 0.12 }; // you in goal: a bit quicker, so reactions can win
 const CPU_KEEPER = { read: 0.3, react: 0.12, stay: 0.12 };
-const CPU_SHOOTER = { noise: 0.09, punishEarly: 0.4 };
+const CPU_SHOOTER = { noise: 0.09, punishEarly: 0.4, honest: 0.75 };   // honest: how often the run-up lean shows the real side
 const keeperStats = () => G.turn === 'cpu' ? YOU_KEEPER : KEEPER;
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -246,11 +247,16 @@ function nextKick() {
   G.result = null;
   G.keeper = newKeeper();
   G.trail = [];
+  G.diveMark = null;
   if (G.turn === 'you') {
     state = 'aim';
   } else {
     state = 'runup';
     G.runupAt = now();
+    // The shooter decides now and leans as they run up: usually toward the real side,
+    // sometimes selling a dummy.
+    const side = Math.random() < 0.5 ? -1 : 1, middle = Math.random() < 0.12;
+    G.plan = { side, middle, tell: middle ? 0 : (Math.random() < CPU_SHOOTER.honest ? side : -side) };
   }
 }
 
@@ -301,11 +307,13 @@ function dive(k, gx, gy, at = now()) {
 }
 
 function cpuShoot() {
-  const k = G.keeper;
-  let side = Math.random() < 0.5 ? -1 : 1;
-  // Diving early gives the game away: the shooter often goes the other way.
-  if (k.diving && Math.random() < CPU_SHOOTER.punishEarly) side = k.tx > 0 ? -1 : 1;
-  const middle = !k.diving && Math.random() < 0.12;
+  const k = G.keeper, plan = G.plan || { side: 1, middle: false };
+  let side = plan.side;
+  // Going clearly early gives the game away: a shooter who sees it often switches sides.
+  // A dive in the last moment of the run-up goes unseen.
+  const seen = k.diving && now() - k.diveAt > 0.3;
+  if (seen && Math.random() < CPU_SHOOTER.punishEarly) side = k.tx > 0 ? -1 : 1;
+  const middle = plan.middle && !k.diving;
   const aimX = middle ? rand(-0.2, 0.2) : side * rand(0.35, 0.9);
   const gy = rand(0.05, 0.85);
   const power = rand(0.35, 0.95);
@@ -382,7 +390,7 @@ function update(dt) {
   updateParticles(dt);
   if (state === 'menu' || state === 'over' || state === 'paused') return;
   updateKeeper(G.keeper, dt);
-  if (state === 'runup' && now() - G.runupAt > 1.1) cpuShoot();
+  if (state === 'runup' && now() - G.runupAt > RUNUP) cpuShoot();
   if (state === 'flight') updateShot();
   if (state === 'result' && now() - G.resultAt > 1.5) {
     const w = winner();
@@ -428,6 +436,7 @@ canvas.addEventListener('pointerdown', e => {
   } else if ((state === 'runup' || state === 'flight') && G.turn === 'cpu') {
     // Dive toward the tap, measured against the goal.
     const gx = (x - GOAL.cx) / GOAL.half, gy = (GOAL.line - y) / GOAL.h;
+    if (!G.keeper.diving) G.diveMark = { x, y: Math.min(y, GOAL.line), t: now() };
     dive(G.keeper, gx, clamp(gy, 0.05, 1.1));
   }
 });
@@ -541,7 +550,7 @@ function showMenu() {
     <div class="rules">
       <div>${dot(C.yellow)}<span><b>Shoot:</b> swipe from the ball to the spot you want in the goal. Faster hits harder but less accurately.</span></div>
       <div>${dot(C.orange)}<span><b>Curl it:</b> bend your swipe. The keeper reads where you started aiming.</span></div>
-      <div>${dot(C.indigo)}<span><b>Save:</b> tap where to dive. Go early to guess, but a shooter who sees you move will go the other way.</span></div>
+      <div>${dot(C.indigo)}<span><b>Save:</b> tap where to dive. Watch which way the shooter leans in the run-up, though some sell you a dummy, and a shooter who sees you go early may switch sides.</span></div>
     </div>
   `, [{ label: 'Kick off', run: newMatch }]);
   card.insertAdjacentHTML('beforeend', `<p class="hint">${stats.played ? `Won ${stats.wins} of ${stats.played} shootouts · ` : ''}P to pause · M to mute</p>`);
@@ -583,6 +592,7 @@ function draw() {
   drawGoalFront();
   if (!behind) drawBall();
   drawTrail();
+  drawDiveMark();
   drawParticles();
   drawHUD();
   drawBanner();
@@ -693,7 +703,7 @@ function drawKeeper() {
   ctx.moveTo(shoulders[0] - px, shoulders[1] - py); ctx.lineTo(hx - px * 0.8, hy - py * 0.8);
   ctx.stroke();
   ctx.fillStyle = C.white;
-  for (const sgn of [1, -1]) { ctx.beginPath(); ctx.arc(hx + px * 0.8 * sgn, hy + py * 0.8 * sgn, 5, 0, Math.PI * 2); ctx.fill(); }
+  for (const sgn of [1, -1]) { ctx.beginPath(); ctx.arc(hx + px * 0.8 * sgn, hy + py * 0.8 * sgn, youInGoal ? 7 : 5, 0, Math.PI * 2); ctx.fill(); }
   // Head.
   ctx.fillStyle = '#E8C9A8';
   ctx.beginPath(); ctx.arc(shoulders[0] + ux * 10, shoulders[1] + uy * 10, 7, 0, Math.PI * 2); ctx.fill();
@@ -705,12 +715,7 @@ function drawBall() {
   if (!s) {
     if (state === 'over' || state === 'menu' || state === 'result') { if (state !== 'result') b = { x: SPOT.x, y: SPOT.y - 6, ground: SPOT.y, r: 13 }; }
     else b = { x: SPOT.x, y: SPOT.y - 6, ground: SPOT.y, r: 13 };
-    if (state === 'runup') {
-      // The shooter's shadow closing in on the ball.
-      const k = clamp((now() - G.runupAt) / 1.1, 0, 1);
-      ctx.fillStyle = 'rgba(0,0,0,0.35)';
-      ctx.beginPath(); ctx.ellipse(SPOT.x - 40 + k * 30, SPOT.y + 80 - k * 66, 26, 9, -0.3, 0, Math.PI * 2); ctx.fill();
-    }
+    if (state === 'runup') drawShooter(clamp((now() - G.runupAt) / RUNUP, 0, 1));
   } else {
     const t = clamp((now() - s.t0) / s.flight, 0, 1);
     b = ballAt(s, t);
@@ -736,6 +741,45 @@ function drawBall() {
     const a = spin + i * 2.1;
     ctx.beginPath(); ctx.arc(b.x + Math.cos(a) * b.r * 0.5, b.y + Math.sin(a) * b.r * 0.5, b.r * 0.26, 0, Math.PI * 2); ctx.fill();
   }
+}
+
+/** The CPU shooter running up from behind the ball, leaning toward a side late on. */
+function drawShooter(k) {
+  const tell = (G.plan && G.plan.tell) || 0;
+  const lean = tell * 0.45 * clamp((k - 0.45) / 0.4, 0, 1);
+  const hx = SPOT.x - 34 + k * 22, hy = SPOT.y + 92 - k * 50;     // hips
+  const bob = Math.sin(k * 18) * 2;
+  const sx = hx + Math.sin(lean) * 34, sy = hy - Math.cos(lean) * 34 + bob;   // shoulders
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.beginPath(); ctx.ellipse(hx, hy + 30, 20, 6, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = '#2B2E44'; ctx.lineWidth = 8;
+  const stride = Math.sin(k * 18) * 9;
+  ctx.beginPath();
+  ctx.moveTo(hx, hy); ctx.lineTo(hx - 7 + stride, hy + 30);
+  ctx.moveTo(hx, hy); ctx.lineTo(hx + 7 - stride, hy + 30);
+  ctx.stroke();
+  ctx.strokeStyle = C.indigo; ctx.lineWidth = 17;
+  ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(sx, sy); ctx.stroke();
+  ctx.lineWidth = 6;
+  ctx.beginPath();
+  ctx.moveTo(sx, sy + 3); ctx.lineTo(sx - 16 - lean * 10, sy + 22);
+  ctx.moveTo(sx, sy + 3); ctx.lineTo(sx + 16 - lean * 10, sy + 22);
+  ctx.stroke();
+  ctx.fillStyle = '#3A2E2A';
+  ctx.beginPath(); ctx.arc(sx + Math.sin(lean) * 10, sy - 10, 9, 0, Math.PI * 2); ctx.fill();
+}
+
+function drawDiveMark() {
+  const m = G.diveMark;
+  if (!m) return;
+  const age = now() - m.t;
+  if (age > 0.9) return;
+  ctx.globalAlpha = 1 - age / 0.9;
+  ctx.strokeStyle = C.orange;
+  ctx.lineWidth = 2.5;
+  ctx.beginPath(); ctx.arc(m.x, m.y, 10 + age * 14, 0, Math.PI * 2); ctx.stroke();
+  ctx.globalAlpha = 1;
 }
 
 function drawTrail() {

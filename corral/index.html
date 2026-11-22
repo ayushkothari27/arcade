@@ -248,14 +248,57 @@ const MIXES = [
   [26, ['boulder', 'ember', 'dart', 'dart', 'ghost', 'ghost']],
 ];
 
+// Rock layouts, one per field. Each is a test (x, y, W, H) → is this cell rock? Coordinates
+// are in cells; u/v helpers measure across and down the field from 0 to 1, so every layout
+// works on both the wide (landscape) and tall (portrait) field.
+const U = (x, W) => (x + 0.5) / W, V = (y, H) => (y + 0.5) / H;
+const box = (x, y, W, H, u0, v0, u1, v1) => U(x, W) >= u0 && U(x, W) <= u1 && V(y, H) >= v0 && V(y, H) <= v1;
+const disc = (x, y, W, H, cu, cv, r) => Math.hypot(x + 0.5 - cu * W, y + 0.5 - cv * H) <= r * Math.min(W, H);
+const ring = (x, y, W, H, cu, cv, r, t) => { const d = Math.hypot(x + 0.5 - cu * W, y + 0.5 - cv * H), m = Math.min(W, H); return d <= r * m && d >= r * m - t; };
+const vbar = (x, y, W, H, u, v0, v1) => Math.abs(x + 0.5 - u * W) <= 0.5 && V(y, H) >= v0 && V(y, H) <= v1;
+const hbar = (x, y, W, H, v, u0, u1) => Math.abs(y + 0.5 - v * H) <= 0.5 && U(x, W) >= u0 && U(x, W) <= u1;
+const LAYOUTS = [
+  /* 1 Open      */ () => false,
+  /* 2 Stone     */ (x, y, W, H) => disc(x, y, W, H, 0.5, 0.5, 0.09),
+  /* 3 Posts     */ (x, y, W, H) => vbar(x, y, W, H, 0.33, 0.3, 0.7) || vbar(x, y, W, H, 0.67, 0.3, 0.7),
+  /* 4 Corners   */ (x, y, W, H) => (U(x, W) < 0.16 || U(x, W) > 0.84) && (V(y, H) < 0.13 || V(y, H) > 0.87),
+  /* 5 Plus      */ (x, y, W, H) => vbar(x, y, W, H, 0.5, 0.3, 0.7) || hbar(x, y, W, H, 0.5, 0.3, 0.7),
+  /* 6 Halo      */ (x, y, W, H) => ring(x, y, W, H, 0.5, 0.5, 0.24, 1.2) && Math.abs(Math.abs(x + 0.5 - W / 2) - Math.abs(y + 0.5 - H / 2)) > 2,
+  /* 7 Steps     */ (x, y, W, H) => [0.25, 0.5, 0.75].some(k => box(x, y, W, H, k - 0.06, k - 0.05, k + 0.06, k + 0.05)),
+  /* 8 Shelves   */ (x, y, W, H) => hbar(x, y, W, H, 0.3, 0.1, 0.55) || hbar(x, y, W, H, 0.5, 0.45, 0.9) || hbar(x, y, W, H, 0.7, 0.1, 0.55),
+  /* 9 Diamond   */ (x, y, W, H) => Math.abs(U(x, W) - 0.5) / 0.14 + Math.abs(V(y, H) - 0.5) / 0.14 <= 1,
+  /* 10 Studs    */ (x, y, W, H) => x % 6 < 2 && y % 6 < 2 && x > 2 && y > 2 && x < W - 3 && y < H - 3,
+  /* 11 H        */ (x, y, W, H) => vbar(x, y, W, H, 0.3, 0.25, 0.75) || vbar(x, y, W, H, 0.7, 0.25, 0.75) || hbar(x, y, W, H, 0.5, 0.3, 0.7),
+  /* 12 Frame    */ (x, y, W, H) => (vbar(x, y, W, H, 0.25, 0.25, 0.75) || vbar(x, y, W, H, 0.75, 0.25, 0.75) || hbar(x, y, W, H, 0.25, 0.25, 0.75) || hbar(x, y, W, H, 0.75, 0.25, 0.75)) && !(Math.abs(U(x, W) - 0.5) < 0.06 || Math.abs(V(y, H) - 0.5) < 0.06),
+  /* 13 Elbows   */ (x, y, W, H) => box(x, y, W, H, 0.15, 0.15, 0.4, 0.2) || box(x, y, W, H, 0.15, 0.15, 0.2, 0.4) || box(x, y, W, H, 0.6, 0.8, 0.85, 0.85) || box(x, y, W, H, 0.8, 0.6, 0.85, 0.85),
+  /* 14 Twins    */ (x, y, W, H) => W > H ? (ring(x, y, W, H, 0.3, 0.5, 0.2, 1.2) || ring(x, y, W, H, 0.7, 0.5, 0.2, 1.2)) && Math.abs(V(y, H) - 0.5) > 0.08 : (ring(x, y, W, H, 0.5, 0.3, 0.2, 1.2) || ring(x, y, W, H, 0.5, 0.7, 0.2, 1.2)) && Math.abs(U(x, W) - 0.5) > 0.1,
+  /* 15 Zigzag   */ (x, y, W, H) => { const k = Math.floor(U(x, W) * 6); return U(x, W) > 0.1 && U(x, W) < 0.9 && Math.abs(V(y, H) - (k % 2 ? 0.42 : 0.58)) * H < 0.6; },
+  /* 16 Isles    */ (x, y, W, H) => [[0.25, 0.3], [0.7, 0.22], [0.5, 0.55], [0.22, 0.75], [0.78, 0.7]].some(([cu, cv]) => disc(x, y, W, H, cu, cv, 0.06)),
+  /* 17 Hash     */ (x, y, W, H) => (vbar(x, y, W, H, 0.38, 0.2, 0.8) || vbar(x, y, W, H, 0.62, 0.2, 0.8) || hbar(x, y, W, H, 0.38, 0.2, 0.8) || hbar(x, y, W, H, 0.62, 0.2, 0.8)) && Math.abs(U(x, W) - 0.5) > 0.05 && Math.abs(V(y, H) - 0.5) > 0.05,
+  /* 18 Comb     */ (x, y, W, H) => [0.2, 0.4, 0.6, 0.8].some(u => vbar(x, y, W, H, u, 0, 0.45)),
+  /* 19 Teeth    */ (x, y, W, H) => [0.2, 0.6].some(u => vbar(x, y, W, H, u, 0, 0.55)) || [0.4, 0.8].some(u => vbar(x, y, W, H, u, 0.45, 1)),
+  /* 20 Pillars  */ (x, y, W, H) => [0.25, 0.5, 0.75].some(u => [0.25, 0.5, 0.75].some(v => disc(x, y, W, H, u, v, 0.035))),
+  /* 21 X        */ (x, y, W, H) => (Math.abs(U(x, W) - V(y, H)) * Math.min(W, H) < 0.7 || Math.abs(U(x, W) + V(y, H) - 1) * Math.min(W, H) < 0.7) && Math.abs(U(x, W) - 0.5) > 0.08 && U(x, W) > 0.15 && U(x, W) < 0.85,
+  /* 22 Rooms    */ (x, y, W, H) => (vbar(x, y, W, H, 0.5, 0.05, 0.95) || hbar(x, y, W, H, 0.5, 0.05, 0.95)) && !(Math.abs(V(y, H) - 0.25) < 0.05 || Math.abs(V(y, H) - 0.75) < 0.05 || Math.abs(U(x, W) - 0.25) < 0.05 || Math.abs(U(x, W) - 0.75) < 0.05),
+  /* 23 Hourglass*/ (x, y, W, H) => Math.abs(U(x, W) - 0.5) < 0.32 * Math.abs(V(y, H) - 0.5) && Math.abs(V(y, H) - 0.5) > 0.12 && Math.abs(V(y, H) - 0.5) < 0.38,
+  /* 24 Dashes   */ (x, y, W, H) => [[0.25, [[0.08, 0.3], [0.4, 0.6], [0.7, 0.92]]], [0.5, [[0.22, 0.45], [0.55, 0.78]]], [0.75, [[0.08, 0.3], [0.4, 0.6], [0.7, 0.92]]]].some(([v, segs]) => segs.some(([a, b]) => hbar(x, y, W, H, v, a, b))),
+  /* 25 Crosses  */ (x, y, W, H) => [[0.25, 0.25], [0.75, 0.25], [0.5, 0.5], [0.25, 0.75], [0.75, 0.75]].some(([cu, cv]) => (Math.abs(x + 0.5 - cu * W) <= 0.5 && Math.abs(y + 0.5 - cv * H) <= 3) || (Math.abs(y + 0.5 - cv * H) <= 0.5 && Math.abs(x + 0.5 - cu * W) <= 3)),
+  /* 26 Target   */ (x, y, W, H) => (ring(x, y, W, H, 0.5, 0.5, 0.36, 1.2) || ring(x, y, W, H, 0.5, 0.5, 0.18, 1.2)) && Math.abs(x + 0.5 - W / 2) > 1.5,
+  /* 27 Spiral   */ (x, y, W, H) => hbar(x, y, W, H, 0.2, 0.2, 0.8) || vbar(x, y, W, H, 0.8, 0.2, 0.8) || hbar(x, y, W, H, 0.8, 0.35, 0.8) || vbar(x, y, W, H, 0.35, 0.4, 0.8) || hbar(x, y, W, H, 0.4, 0.35, 0.62),
+  /* 28 Gates    */ (x, y, W, H) => [0.25, 0.5, 0.75].some((v, i) => hbar(x, y, W, H, v, 0.05, 0.95) && Math.abs(U(x, W) - [0.2, 0.8, 0.5][i]) > 0.09),
+  /* 29 Maze     */ (x, y, W, H) => [0.2, 0.4, 0.6, 0.8].some((u, i) => vbar(x, y, W, H, u, i % 2 ? 0.2 : 0, i % 2 ? 1 : 0.8)),
+  /* 30 Citadel  */ (x, y, W, H) => { const u = U(x, W), v = V(y, H), on = (k, n, c) => Math.abs(k + 0.5 - c * n) <= 0.5; const wall = (u >= 0.2 && u <= 0.8 && v >= 0.2 && v <= 0.8) && (on(x, W, 0.22) || on(x, W, 0.78) || on(y, H, 0.22) || on(y, H, 0.78)) && Math.abs(u - 0.5) > 0.07 && Math.abs(v - 0.5) > 0.07; const keep = (on(x, W, 0.5) && Math.abs(v - 0.5) < 0.12) || (on(y, H, 0.5) && Math.abs(u - 0.5) < 0.12); return wall || keep; },
+];
+
 function levelSpec(n) {
   const t = Math.min(1, (n - 1) / (LEVELS - 1));
   let types = MIXES[0][1];
   for (const [from, mix] of MIXES) if (n >= from) types = mix;
   return {
     types,
-    speed: 1 + 0.3 * t,           // spark speed multiplier
-    fence: 20 - 4 * t,            // fence growth, cells per second per arm
+    speed: 1 + 0.4 * t,           // spark speed multiplier
+    fence: 20 - 5 * t,            // fence growth, cells per second per arm
+    layout: LAYOUTS[(n - 1) % LAYOUTS.length],
     target: 0.85,                 // share of the field to claim
     capture: 0.045 - 0.015 * t,   // pens this small capture the sparks inside
   };
@@ -344,13 +387,25 @@ const G = {
 };
 
 const idx = (x, y) => y * G.cols + x;
-const solid = (x, y) => x < 0 || y < 0 || x >= G.cols || y >= G.rows || G.grid[idx(x, y)] === 1;
+// Grid: 0 open · 1 claimed (or border) · 2 rock from the field's layout
+const solid = (x, y) => x < 0 || y < 0 || x >= G.cols || y >= G.rows || G.grid[idx(x, y)] !== 0;
 const now = () => performance.now() / 1000;
 const rand = (a, b) => a + Math.random() * (b - a);
 
 function newGame(level = 1) {
   G.level = level; G.score = 0; G.hearts = 3;
   newLevel();
+}
+
+/** A random open spot for a spark, clear of rock and walls. */
+function openSpot() {
+  for (let k = 0; k < 400; k++) {
+    const x = rand(3, G.cols - 3), y = rand(3, G.rows - 3);
+    let clear = true;
+    for (let dy = -1; dy <= 1 && clear; dy++) for (let dx = -1; dx <= 1; dx++) if (solid(Math.floor(x) + dx, Math.floor(y) + dy)) { clear = false; break; }
+    if (clear) return { x, y };
+  }
+  return { x: G.cols / 2, y: G.rows / 2 };
 }
 
 function newLevel() {
@@ -362,11 +417,16 @@ function newLevel() {
   G.fillAt = new Float32Array(G.cols * G.rows);
   for (let x = 0; x < G.cols; x++) { G.grid[idx(x, 0)] = 1; G.grid[idx(x, G.rows - 1)] = 1; }
   for (let y = 0; y < G.rows; y++) { G.grid[idx(0, y)] = 1; G.grid[idx(G.cols - 1, y)] = 1; }
-  G.interior = (G.cols - 2) * (G.rows - 2);
-  G.filled = 0;
   G.fence = null;
   G.floaters = [];
   G.spec = levelSpec(G.level);
+  // Lay the field's rocks. The 85% target counts open ground only.
+  let rocks = 0;
+  for (let y = 1; y < G.rows - 1; y++) for (let x = 1; x < G.cols - 1; x++) {
+    if (G.spec.layout(x, y, G.cols, G.rows)) { G.grid[idx(x, y)] = 2; rocks++; }
+  }
+  G.interior = (G.cols - 2) * (G.rows - 2) - rocks;
+  G.filled = 0;
 
   // Sparks start spread out, heading diagonally (never straight along a wall).
   const speedUp = G.spec.speed;
@@ -376,7 +436,7 @@ function newLevel() {
     const speed = t.speed * speedUp;
     return {
       type, r: t.r,
-      x: rand(3, G.cols - 3), y: rand(3, G.rows - 3),
+      ...openSpot(),
       vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
       trail: [], phase: rand(0, 4),
     };
@@ -468,7 +528,7 @@ function updateFence(dt) {
 
 function setSolid(x, y) {
   const i = idx(x, y);
-  if (G.grid[i] === 1) return false;
+  if (G.grid[i] !== 0) return false;
   G.grid[i] = 1;
   G.fillAt[i] = now();
   G.filled++;
@@ -837,7 +897,17 @@ function draw() {
   for (let y = 0; y < G.rows; y++) {
     for (let x = 0; x < G.cols; x++) {
       const i = idx(x, y);
-      if (G.grid[i] !== 1) continue;
+      if (G.grid[i] === 0) continue;
+      if (G.grid[i] === 2) {
+        // Rock: slate blocks with a light top edge.
+        ctx.fillStyle = 'rgba(120,126,150,0.55)';
+        ctx.fillRect(ox + x * cell, oy + y * cell, cell + 0.5, cell + 0.5);
+        if (!solid(x, y - 1) || G.grid[idx(x, y - 1)] !== 2) {
+          ctx.fillStyle = 'rgba(255,255,255,0.18)';
+          ctx.fillRect(ox + x * cell, oy + y * cell, cell + 0.5, Math.max(1, cell * 0.18));
+        }
+        continue;
+      }
       const border = x === 0 || y === 0 || x === G.cols - 1 || y === G.rows - 1;
       const age = border ? 99 : t - G.fillAt[i];
       if (age < 0.5) {

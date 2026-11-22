@@ -133,10 +133,11 @@ const C = {
 };
 
 // The CPU. speed: paddle speed at serve pace (it speeds up with the ball) · react: seconds
-// before it reads a shot · err: how far off it aims, scaled up by errGrow as the ball speeds up · aim: how much
-// it angles shots · smart: chance it aims away from you · read: how well it reads spin
-// · spin: how much curve it puts on its own shots
-const CPU = { speed: 310, react: 0.26, err: 26, errGrow: 4, aim: 0.5, smart: 0.35, read: 0.6, spin: 0.3 };
+// before it reads a shot · err: base aiming error, plus errGrow × how hard your shot is to
+// read (spin, sharp angle and pace, weighted by the *Fool values), so it only misjudges good
+// shots · aim: how much it angles its own shots · smart: chance it aims away from you
+// · read: how well it reads spin when predicting · spin: how much curve it puts on its shots
+const CPU = { speed: 340, react: 0.2, err: 5, errGrow: 70, spinFool: 0.9, angleFool: 0.6, paceFool: 0.5, aim: 0.5, smart: 0.35, read: 0.6, spin: 0.3 };
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const now = () => performance.now() / 1000;
@@ -349,7 +350,12 @@ function predictX(b, i, read) {
 function planCPU(i) {
   if (!isCPU(i)) return;
   const d = CPU, p = P[i];
-  p.err = (Math.random() * 2 - 1) * d.err * (1 + d.errGrow * (pace() - 1));
+  // How hard the incoming shot is to read: spin, a sharp angle and pace all count.
+  // Plain returns are read almost perfectly; only good shots make it misjudge.
+  const b = G.ball, s = speedFor(G.rally);
+  const angle = b ? Math.min(1, Math.abs(b.vx) / (s * Math.sin(55 * Math.PI / 180))) : 0;
+  const hard = (b ? Math.abs(b.spin) : 0) * d.spinFool + angle * d.angleFool + (pace() - 1) * d.paceFool;
+  p.err = (Math.random() * 2 - 1) * (d.err + d.errGrow * hard * hard);
   p.aim = (Math.random() * 2 - 1) * d.aim * PW / 2;
   // Sometimes aim deliberately at the side the opponent is not on.
   if (Math.random() < d.smart) {
