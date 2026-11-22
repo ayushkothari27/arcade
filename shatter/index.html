@@ -244,40 +244,41 @@ function save(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch 
 // ─────────────────────────────────────────────────
 //  LEVELS
 // ─────────────────────────────────────────────────
-// Hand-designed levels, made of dots on a 32-column grid.
-//   lowercase color letter = 1 hit · UPPERCASE = 2 hits · % = 3 hits · # = steel · * = bomb · . = empty
-//   16-char rows are the left half (mirrored); 8-char rows are pictures at 2× (each cell a 2×2 block).
+// Hand-designed levels. Every brick is made of dots: a pill of 2 dots side by side, or on
+// picture levels (pic) a square of 2×2 dots. Hit any of its dots and the whole brick takes it.
+//   Each row is the LEFT half, 8 bricks wide, mirrored to 16.
+//   lowercase color = 1 hit · UPPERCASE = 2 hits · % = 3 hits · # = steel · * = bomb · . = empty
 const LEVELS = [
-  { name: "Rainbow", rows: ['..rrrrrrrrrrrrrr', '..oooooooooooooo', '..yyyyyyyyyyyyyy', '..gggggggggggggg', '..cccccccccccccc', '..bbbbbbbbbbbbbb'] },
-  { name: "Heart", rows: ['........', '..rrrr..', '.rrwwrr.', '.rwwrrrr', '.rrrrrrr', '.rrrrrrr', '..rrrrrr', '...rrrrr', '....rrrr', '.....rrr', '......rr', '.......r'] },
-  { name: "Pyramid", rows: ['..............YY', '.............yyy', '............oooo', '...........ooooo', '..........rrrrrr', '.........rrrrrrr', '........pppppppp', '.......ppppppppp', '......vvvvvvvvvv', '.....vvvvvvvvvvv'] },
-  { name: "Star", rows: ['.......y', '.......y', '......yy', '......yy', 'yyyyyyyy', '.yyyyyy*', '...yyyyy', '....yyyy', '....yyyy', '...yyyy.', '..yyy...', '.yy.....'] },
-  { name: "Pillars", rows: ['..GG..CC..BB..PP', '..gg..cc..bb..pp', '..gg..cc..bb..pp', '..gg..cc..bb..pp', '..gg..cc..bb..pp', '..gg..cc..bb..pp', '..gg..cc..bb..pp', '..gg..cc..bb..pp', '..gg..cc..bb..pp', '..gg..cc..bb..pp', '..gg..cc..bb..pp'] },
-  { name: "Smiley", rows: ['.....yyy', '...yyyyy', '..yyyyyy', '.yyyyKKy', '.yyyyKKy', 'yyyyyyyy', 'yyyyyyyy', 'yykyyyyy', '.yykkyyy', '..yyykkk', '...yyyyy', '.....yyy'] },
-  { name: "Checker", rows: ['..BcBcBcBcBcBcBc', '..cBcBcBcBcBcBcB', '..BcBcBcBcBcBcBc', '..cBcBcBcBcBcBcB', '..BcBcBcBcBcBcBc', '..cBcBcBcBcBcBcB', '..BcBcBcBcBcBcBc', '..cBcBcBcBcBcBcB'] },
-  { name: "Rocket", rows: ['.......w', '......ww', '.....wwb', '.....wbC', '.....wbC', '.....wwb', '.....www', '....Rwww', '...RRwww', '..RRRwww', '.....oyy', '......oy', '.......o'] },
-  { name: "Shelf", rows: ['..oooooooooooooo', '..OOOOOOOOOOOOOO', '..oooooooooooooo', '................', '..#####....#####', '................', '..yyyyyyyyyyyyyy', '..gggggggggggggg'] },
-  { name: "Tree", rows: ['.......g', '......gg', '.....gg*', '....gggg', '.....ggg', '....gggg', '...gggg*', '....gggg', '...ggggl', '..gggggg', '.......N', '.......N', '......NN'] },
-  { name: "Diamond", rows: ['...............c', '.............ccc', '...........ccccC', '.........cccccCC', '.......cccccCCCC', '.....ccccCCCCCC*', '.......cccccCCCC', '.........cccccCC', '...........ccccC', '.............ccc', '...............c'] },
-  { name: "House", rows: ['.......R', '......RR', '.....RRR', '....rrrr', '...rrrrr', '..rrrrrr', '...wwwww', '...wCCww', '...wCCww', '...wwwwN', '...wwwwN', '...wwwwN'] },
-  { name: "Fortress", rows: ['..vvvvvvvvvvvvvv', '..pppppppppppppp', '................', '..##########....', '..#.............', '..#..VVVVVVVVVVV', '..#..V%%%%%%%%%%', '..#..V%%%%%%%%%*', '..#..V%%%%%%%%%%', '..#..VVVVVVVVVVV', '..#.............', '..###...........'] },
-  { name: "Crown", rows: ['........', '.y......', '.yy....y', '.yyy..yy', '.yyyyyyy', '.yyyyyyy', '.y%yyyy%', '.yyyyyyy', '.WWWWWWW', '.WWWWWWW'] },
-  { name: "Stairs", rows: ['..LLLL..........', '..llll..LLLL....', '..####..llll..LL', '........####..ll', '..............##', '................', '..YYYY..........', '..yyyy..YYYY....', '..####..yyyy..YY', '........####..yy', '..............##'] },
-  { name: "Gem", rows: ['...Ccccc', '..Cwcccc', '.Cwccccc', 'Cccccccc', '.Bcccccc', '..Bccccc', '...Bcccc', '....Bccc', '.....Bcc', '......Bc', '.......C'] },
-  { name: "Cages", rows: ['..cccccccccccccc', '..cccccccccccccc', '................', '..##..........##', '..#............#', '..#.PPPPPPPPPP.#', '..#.pppppppppp.#', '..#.P%%%%%%%%P.#', '..#.pppppppppp.#', '..#.PPPPPPPPPP.#', '..#............#', '..#####....#####'] },
-  { name: "Apple", rows: ['.......#', '......L#', '....Lll.', '..Rrrrrr', '.Rwrrrrr', 'Rwrrrrrr', 'Rrrrrrrr', 'Rrrrrrrr', '.Rrrrrrr', '..Rrrrrr', '...Rrr.r'] },
-  { name: "Chain", rows: ['..%%%%%%%%%%%%%%', '..%%*%%%%*%%%%*%', '..%%%%%%%%%%%%%%', '..VVVVVVVVVVVVVV', '..vvvvvvvvvvvvvv', '..VVVVVVVVVVVVVV', '..%%%%%%%%%%%%%%', '..%*%%%%*%%%%*%%', '..%%%%%%%%%%%%%%'] },
-  { name: "Cat", rows: ['.V......', '.Vv.....', '.Vvv....', '.Vvvvvvv', 'Vvvvvvvv', 'Vv%kvvvv', 'Vvkkvvvv', 'Vvvvvvvp', 'Vvvvvvvv', '.Vvvwvvv', '..Vvvvvv', '....Vvvv'] },
-  { name: "Towers", rows: ['..wwwwwwwwwwwwww', '................', '....########....', '....#BBBBBB#....', '....#BBBBBB#....', '....#%%%%%%#....', '....#bbbbbb#....', '....#bbbbbb#....', '....#%%%%%%#....', '....#BBBBBB#....', '....#BBBBBB#....', '....#%%%%%%#....', '....#bbbbbb#....'] },
-  { name: "Serpent", rows: ['..pppppppppppppp', '..############..', '..pppppppppppppp', '..PPPPPPPPPPPPPP', '......##########', '..cccccccccccccc', '..CCCCCCCCCCCCCC', '..############..', '..%%%%%%%%%%%%%%'] },
-  { name: "Grid", rows: ['..OOOOOOOOOOOOOO', '..%#%#%#%#%#%#%#', '..OOOOOOOOOOOOOO', '..#%#%#%#%#%#%#%', '..OOOOOOOOOOOOOO', '..%#%#%#%#%#%#%#', '..oooooooooooooo'] },
-  { name: "Funnel", rows: ['..rrrrrrrrrrrrrr', '..RRRRRRRRRRRRRR', '..%%%%%%%%%%%%%%', '..oooooooooooooo', '................', '..##............', '....##..........', '......##........', '........##......', '..........##....', '............##..'] },
-  { name: "Bulwark", rows: ['..RRRRRRRRRRRRRR', '..RRRRRRRRRRRRRR', '..%%%%%%%%%%%%%%', '..OOOOOOOOOOOOOO', '..OOOOOOO*OOOOOO', '..%%%%%%%%%%%%%%', '..YYYYYYYYYYYYYY', '..YYYYYYYYYYYYYY', '..%%%%%%%%%%%%%%', '..GGGGGGGGGGGGGG', '..GG*GGGGGGGGGGG'] },
-  { name: "Iron Heart", rows: ['..####..', '.#RRRR#.', '.RRwwRR#', '.RwwRRRR', '.RRRRRRR', '.RRRRRRR', '..RRRRRR', '...RRRRR', '....RRRR', '.....RRR', '......RR', '.......R'] },
-  { name: "Vault", rows: ['..wwwwwwwwwwwwww', '..wwwwwwwwwwwwww', '................', '....#########...', '....#...........', '....#.%%%%%%%%%%', '....#.%%%%**%%%%', '....#.%%%%%%%%%%', '....#...........', '....##########..'] },
-  { name: "Waves", rows: ['........#v%%#v..', '.......v%%VV%%v.', '..v..vv%VV..VV%v', '..%v#%%V......V%', '..V%%VV........V', '......bb%%bb....', '.....b%%BB%%#...', '...b#%BB..BB%bb.', '..b%%B......B%%b', '..%BB........BB%', '....#c%%#c......', '...c%%CC%%c.....', '..c%CC..CC%c#..c', '..%C......C%%cc%', '..C........CC%%C'] },
-  { name: "Labyrinth", rows: ['..##############', '..#bbbbbb#cccccc', '..#bBBBBb#cCCCCC', '..#bbbbbb.cccccc', '..###.####.#####', '..#pppppp#vvvvvv', '..#pPPPPp#v%%%%%', '..#pppppp.vvvvvv', '..##.#######.###'] },
-  { name: "Citadel", rows: ['..wwwwwwwwwwwwww', '..%%%%%%%%%%%%%%', '..vvvvvvvvvvvvvv', '................', '..##..######..##', '..#..........#..', '..#.PPPPPPPP.#..', '..#.P%%%%%%P.#%.', '..#.PPPPPPPP.#..', '..#..........#..', '..####....####..', '................', '..%%%%%%%%%%%%%%', '..RRRRRRRRRRRRRR'] },
+  { name: "First Wall", rows: ['........', '........', '........', '.rrrrrrr', '.ooooooo', '.yyyyyyy', '.ggggggg', '.ccccccc'] },
+  { name: "Steps", rows: ['........', '........', '.......y', '......yy', '.....ooo', '....oooo', '...rrrrr', '..rrrrrr', '.ppppppp'] },
+  { name: "Lanes", rows: ['........', '........', '.gg.cc.b', '.gg.cc.b', '.gg.cc.b', '.gg.cc.b', '.gg.cc.b', '.gg.cc.b', '.gg.cc.b'] },
+  { name: "Fuse", rows: ['........', '........', '.ooooooo', '.ooooooo', '.ooo*ooo', '.ooooooo', '.ooooooo', '........', '.yyyyyyy'] },
+  { name: "Heart", pic: true, rows: ['........', '..rrrr..', '.rrwwrr.', '.rwwrrrr', '.rrrrrrr', '.rrrrrrr', '..rrrrrr', '...rrrrr', '....rrrr', '.....rrr', '......rr', '.......r'] },
+  { name: "Windows", rows: ['........', '........', '.vvvvvvv', '.v..v..v', '.v..v..v', '.vvvvvvv', '.v..v..v', '.v..v..v', '.vvvvvvv'] },
+  { name: "Armor", rows: ['........', '........', '.RRRRRRR', '.ooooooo', '.OOOOOOO', '.yyyyyyy', '.YYYYYYY', '.ggggggg'] },
+  { name: "Shelf", rows: ['........', '........', '.ggggggg', '.GGGGGGG', '.ggggggg', '........', '.###..##', '........', '.ccccccc', '.ccccccc'] },
+  { name: "Rocket", pic: true, rows: ['.......w', '......ww', '.....wwb', '.....wbC', '.....wbC', '.....wwb', '.....www', '....Rwww', '...RRwww', '..RRRwww', '.....oyy', '......oy', '.......o'] },
+  { name: "Diamond", rows: ['........', '........', '.......c', '......cc', '.....ccC', '....ccCC', '...ccCC*', '....ccCC', '.....ccC', '......cc', '.......c'] },
+  { name: "Battlements", rows: ['........', '........', '........', '.#.#.#.#', '.wwwwwww', '.WWWWWWW', '.wwwwwww', '.WWWWWWW', '.wwwwwww'] },
+  { name: "Tree", pic: true, rows: ['.......g', '......gg', '.....gg*', '....gggg', '.....ggg', '....gggg', '...gggg*', '....gggg', '...ggggl', '..gggggg', '.......N', '.......N', '......NN'] },
+  { name: "Fortress", rows: ['........', '........', '.ppppppp', '........', '.####...', '.#......', '.#.VVVVV', '.#.V%%%%', '.#.V%%%*', '.#.VVVVV', '.#......', '.##.....'] },
+  { name: "Crown", pic: true, rows: ['........', '.y......', '.yy....y', '.yyy..yy', '.yyyyyyy', '.yyyyyyy', '.y%yyyy%', '.yyyyyyy', '.WWWWWWW', '.WWWWWWW'] },
+  { name: "Teeth", rows: ['........', '........', '.LLLLLLL', '.lllllll', '........', '...##...', '.....##.', '.......#', '........', '.YYYYYYY', '.yyyyyyy'] },
+  { name: "Gem", pic: true, rows: ['...BBBBB', '..Bwcccc', '.Bwccccc', 'Bccccc%c', '.Bcccccc', '..Bccccc', '...Bcccc', '....Bccc', '.....Bcc', '......Bc', '.......B'] },
+  { name: "Cages", rows: ['........', '........', '.ccccccc', '.ccccccc', '........', '.######.', '.#PPPP#.', '.#P%%P#.', '.#PPPP#.', '.##..##.'] },
+  { name: "Apple", pic: true, rows: ['.......#', '......l#', '....lll.', '..Rrrrrr', '.Rwrrrrr', 'Rwrrrrrr', 'Rrrrrrrr', 'Rrrrrrrr', '.Rrrrrrr', '..Rrrrrr', '...Rrr.r'] },
+  { name: "Chain", rows: ['........', '........', '.*%%%%%%', '.%*%%%%%', '.%%*%%%%', '.%%%*%%%', '.%%%%*%%', '.%%%%%*%', '.%%%%%%*'] },
+  { name: "Cat", pic: true, rows: ['.V......', '.Vv.....', '.Vvv....', '.Vvvvvvv', 'Vvvvvvvv', 'Vv%kvvvv', 'Vvkkvvvv', 'Vvvvvvvp', 'Vvvvvvvv', '.Vvvwvvv', '..Vvvvvv', '....Vvvv'] },
+  { name: "Towers", rows: ['........', '........', '.wwwwwww', '.WWWWWWW', '........', '..####..', '..#BB#..', '..#%%#..', '..#BB#..', '..#%%#..', '..#BB#..', '..#..#..'] },
+  { name: "Serpent", rows: ['........', '........', '.ppppppp', '.######.', '.PPPPPPP', '.ppppppp', '...#####', '.ccccccc', '.CCCCCCC', '.######.', '.%%%%%%%'] },
+  { name: "Checker", rows: ['........', '........', '.OOOOOOO', '.%#%#%#%', '.OOOOOOO', '.#%#%#%#', '.OOOOOOO', '.%#%#%#%', '.ooooooo'] },
+  { name: "Funnel", rows: ['........', '........', '.rrrrrrr', '.RRRRRRR', '.%%%%%%%', '........', '...#....', '....#...', '.....#..', '......#.'] },
+  { name: "Bulwark", rows: ['........', '........', '.RRRRRRR', '.RRRRRRR', '.%%%%%%%', '.OOO*OOO', '.OOOO*OO', '.%%%%%%%', '.YYYYYYY', '.YY*YYYY', '.%%%%%%%'] },
+  { name: "Iron Heart", pic: true, rows: ['..####..', '.#RRRR#.', '.RRwwRR#', '.RwwRRRR', '.RRRRRRR', '.RRRRRRR', '..RRRRRR', '...RRRRR', '....RRRR', '.....RRR', '......RR', '.......R'] },
+  { name: "Vault", rows: ['........', '........', '.wwwwwww', '.wwwwwww', '........', '..#####.', '..#.....', '..#.%%%%', '..#.%%**', '..#.%%%%', '..#.....', '..####..'] },
+  { name: "Waves", rows: ['........', '........', '....v%%%', '.v#v%VVV', '.%%%V...', '.VVV....', '..#%%%%b', '.b%BBBB%', '.%B....B', '.B......', '.%%%%c..', '.CCCC%#c', '.....C%%', '......CC'] },
+  { name: "Labyrinth", rows: ['........', '........', '..######', '..#bbbb.', '..#bBBb.', '..#bbbb.', '..##..#.', '..#pppp.', '..#p%%p.', '..#pppp.', '..#..##.'] },
+  { name: "Citadel", rows: ['........', '........', '.wwwwwww', '.%%%%%%%', '.vvvvvvv', '........', '.##.####', '.#......', '.#.PPPP.', '.#.P%%P*', '.#.PPPP.', '.#......', '.###..##', '........', '.%%%%%%%', '.RRRRRRR'] },
 ];
 
 const TIERS = [
@@ -287,27 +288,32 @@ const TIERS = [
   { name: 'Expert', from: 21, to: 30, color: C.pink },
 ];
 
-/** Builds a level's dots from its map. */
+/** Builds a level's bricks (and the dot grid the ball collides with) from its map. */
 function buildLevel(level) {
   const def = LEVELS[level - 1];
-  const scale = def.rows[0].length === 8 ? 2 : 1;
+  const tall = def.pic ? 2 : 1;
   const grid = new Array(COLS * GRID_ROWS).fill(null);
   const bricks = [];
   def.rows.forEach((half, r) => {
     const row = half + [...half].reverse().join('');
     [...row].forEach((ch, c) => {
       if (ch === '.') return;
-      for (let dy = 0; dy < scale; dy++) for (let dx = 0; dx < scale; dx++) {
-        const x = c * scale + dx, y = r * scale + dy;
-        if (y >= GRID_ROWS || grid[y * COLS + x]) continue;
-        const kind = ch === '#' ? 'steel' : ch === '*' ? 'bomb' : 'normal';
-        const hp = ch === '%' ? 3 : /[A-Z]/.test(ch) ? 2 : 1;
-        const color = kind === 'steel' ? C.steel : kind === 'bomb' ? C.pink : ch === '%' ? C.yellow : PALETTE[ch.toLowerCase()];
-        const b = { c: x, r: y, kind, hp, max: hp, flash: 0, color,
-          cx: BRICK_LEFT + x * PITCH + DOT / 2, cy: BRICK_TOP + y * PITCH + DOT / 2 };
-        grid[y * COLS + x] = b;
-        bricks.push(b);
+      const kind = ch === '#' ? 'steel' : ch === '*' ? 'bomb' : 'normal';
+      const hp = ch === '%' ? 3 : /[A-Z]/.test(ch) ? 2 : 1;
+      const color = kind === 'steel' ? C.steel : kind === 'bomb' ? C.pink : ch === '%' ? C.yellow : PALETTE[ch.toLowerCase()];
+      const g = { kind, hp, max: hp, flash: 0, color, dots: [] };
+      for (let dy = 0; dy < tall; dy++) for (let dx = 0; dx < 2; dx++) {
+        const x = c * 2 + dx, y = r * tall + dy;
+        if (y >= GRID_ROWS) continue;
+        const d = { g, c: x, r: y, cx: BRICK_LEFT + x * PITCH + DOT / 2, cy: BRICK_TOP + y * PITCH + DOT / 2 };
+        grid[y * COLS + x] = d;
+        g.dots.push(d);
       }
+      if (!g.dots.length) return;
+      const xs = g.dots.map(d => d.cx), ys = g.dots.map(d => d.cy);
+      g.x0 = Math.min(...xs); g.x1 = Math.max(...xs); g.y0 = Math.min(...ys); g.y1 = Math.max(...ys);
+      g.cx = (g.x0 + g.x1) / 2; g.cy = (g.y0 + g.y1) / 2;
+      bricks.push(g);
     });
   });
   return { bricks, grid, alive: bricks.filter(b => b.kind !== 'steel').length, name: def.name };
@@ -465,8 +471,8 @@ function moveBall(b, dt) {
         if (!br) continue;
         const dx = b.x - br.cx, dy = b.y - br.cy, d = Math.hypot(dx, dy);
         if (d >= BALL_R + DOT_R) continue;
-        const fire = G.fx.fire > 0 && br.kind !== 'steel';
-        hitBrick(br, fire);
+        const fire = G.fx.fire > 0 && br.g.kind !== 'steel';
+        hitBrick(br.g, fire);
         if (fire) continue;
         // Bounce like a brick: flip the axis the ball came in on, and push it clear.
         if (Math.abs(dx) > Math.abs(dy)) {
@@ -504,12 +510,12 @@ function hitBrick(br, fire) {
   br.flash = 1;
   if (br.hp > 0) { sfx.brick(G.combo); return; }
 
-  // Popped: take it off the grid.
-  G.grid[br.r * COLS + br.c] = null;
+  // Popped: take all its dots off the grid.
+  for (const d of br.dots) G.grid[d.r * COLS + d.c] = null;
   G.alive--;
   G.combo++;
-  G.score += Math.round(5 * br.max * (1 + Math.min(G.combo, 50) * 0.05));
-  burst(br.cx, br.cy, br.color, 4);
+  G.score += Math.round(20 * br.max * (1 + Math.min(G.combo, 50) * 0.05));
+  burst(br.cx, br.cy, br.color, 3 + br.dots.length * 2);
   if (!fire || Math.random() < 0.3) sfx.brick(G.combo);
   maybeDrop(br.cx, br.cy);
 
@@ -518,17 +524,21 @@ function hitBrick(br, fire) {
     sfx.boom();
     G.shake = 6;
     burst(br.cx, br.cy, C.orange, 22);
-    for (let r = br.r - 2; r <= br.r + 2; r++) {
-      for (let c = br.c - 2; c <= br.c + 2; c++) {
-        const o = r >= 0 && r < GRID_ROWS && c >= 0 && c < COLS ? G.grid[r * COLS + c] : null;
-        if (o && o.kind !== 'steel') hitBrick(o, true);
+    const hit = new Set();
+    for (const d of br.dots) {
+      for (let r = d.r - 2; r <= d.r + 2; r++) {
+        for (let c = d.c - 2; c <= d.c + 2; c++) {
+          const o = r >= 0 && r < GRID_ROWS && c >= 0 && c < COLS ? G.grid[r * COLS + c] : null;
+          if (o && o.g.kind !== 'steel') hit.add(o.g);
+        }
       }
     }
+    for (const g of hit) hitBrick(g, true);
   }
 }
 
 function maybeDrop(x, y) {
-  if (Math.random() > 0.07) return;
+  if (Math.random() > 0.11) return;
   const total = DROP_TABLE.reduce((s, [, w]) => s + w, 0);
   let roll = Math.random() * total;
   for (const [type, w] of DROP_TABLE) {
@@ -641,7 +651,7 @@ function showMenu() {
   const best = load('shatter-best', 0);
   showCard(`
     <h1>Shat<em>ter</em></h1>
-    <p class="sub">Pop every dot across ${LEVEL_COUNT} levels. Catch power-ups and let the balls multiply.</p>
+    <p class="sub">Break every brick across ${LEVEL_COUNT} levels. Catch power-ups and let the balls multiply.</p>
     <div class="legend">
       ${['multi', 'plus3', 'wide', 'fire', 'slow', 'shield', 'life', 'shrink'].map(t => `<div>${pill(t)}<span>${POWERS[t].name}</span></div>`).join('')}
     </div>
@@ -845,27 +855,33 @@ function drawHUD() {
 function drawBricks() {
   for (const b of G.bricks) {
     if (b.hp <= 0) continue;
+    const x = b.x0 - DOT_R + 0.5, y = b.y0 - DOT_R + 0.5;
+    const w = b.x1 - b.x0 + DOT - 1, h = b.y1 - b.y0 + DOT - 1;
+    const rad = Math.min(DOT_R, h / 2);
     ctx.fillStyle = b.color;
-    ctx.beginPath(); ctx.arc(b.cx, b.cy, DOT_R, 0, Math.PI * 2); ctx.fill();
+    rrect(x, y, w, h, rad); ctx.fill();
     if (b.kind === 'steel') {
       ctx.strokeStyle = 'rgba(255,255,255,0.45)';
       ctx.lineWidth = 1.2;
-      ctx.beginPath(); ctx.arc(b.cx, b.cy, DOT_R - 2, 0, Math.PI * 2); ctx.stroke();
+      rrect(x + 2, y + 2, w - 4, h - 4, Math.max(1, rad - 2)); ctx.stroke();
     } else if (b.kind === 'bomb') {
       ctx.fillStyle = C.bg;
-      ctx.beginPath(); ctx.arc(b.cx, b.cy, 2.2, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(b.cx, b.cy, 2.6, 0, Math.PI * 2); ctx.fill();
     } else if (b.hp > 1) {
-      // Tough dots: a ring per extra hit left.
+      // Tough bricks: an inset ring per extra hit left.
       ctx.strokeStyle = 'rgba(26,26,46,0.6)';
       ctx.lineWidth = 1.3;
-      for (let i = 1; i < b.hp; i++) { ctx.beginPath(); ctx.arc(b.cx, b.cy, DOT_R - 1.5 * i - 0.5, 0, Math.PI * 2); ctx.stroke(); }
+      for (let i = 1; i < b.hp; i++) {
+        const k = i * 2.2;
+        rrect(x + k, y + k, w - 2 * k, h - 2 * k, Math.max(1, rad - k)); ctx.stroke();
+      }
     } else {
-      ctx.fillStyle = 'rgba(255,255,255,0.28)';
-      ctx.beginPath(); ctx.arc(b.cx - 1.6, b.cy - 1.6, 1.6, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.25)';
+      rrect(x + 2, y + 1.5, w - 4, 2.2, 1.1); ctx.fill();
     }
     if (b.flash > 0) {
       ctx.fillStyle = `rgba(255,255,255,${0.7 * b.flash})`;
-      ctx.beginPath(); ctx.arc(b.cx, b.cy, DOT_R, 0, Math.PI * 2); ctx.fill();
+      rrect(x, y, w, h, rad); ctx.fill();
     }
   }
 }
