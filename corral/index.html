@@ -107,7 +107,8 @@
       border-radius: 20px;
       padding: 1.8rem 1.6rem 1.5rem;
       text-align: center;
-      overflow: hidden;
+      overflow: hidden auto;
+      max-height: calc(100svh - 32px);
     }
     .card::before {
       content: '';
@@ -134,40 +135,22 @@
     .rules b { font-weight: 600; }
     .dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; margin-top: 0.3rem; }
 
-    .modes {
-      display: inline-flex;
-      gap: 4px;
-      padding: 4px;
-      margin: 0 0 1.1rem;
-      background: var(--surface);
+    .hint a { color: var(--muted); }
+    .levels { display: grid; gap: 0.6rem; margin: 0 0 1.2rem; text-align: left; }
+    .tier-name { font-size: 0.68rem; font-weight: 600; letter-spacing: 0.08em; margin-bottom: 0.3rem; }
+    .tier-lv { display: flex; flex-wrap: wrap; gap: 5px; }
+    .lv {
+      width: 30px; height: 30px;
+      border-radius: 9px;
       border: 1px solid var(--border);
-      border-radius: 999px;
-    }
-    .mode {
-      border: none;
-      background: transparent;
+      background: var(--surface);
       color: var(--muted);
-      font: inherit;
-      font-size: 0.82rem;
-      font-weight: 600;
-      padding: 0.4rem 1.1rem;
-      border-radius: 999px;
+      font: inherit; font-size: 0.78rem; font-weight: 600;
       cursor: pointer;
     }
-    .mode.on { background: rgba(255,255,255,0.1); color: var(--text); }
-    .hint a { color: var(--muted); }
-    .picker {
-      display: flex; align-items: center; justify-content: center; gap: 0.6rem;
-      margin: 0 0 1.1rem;
-      font-size: 0.82rem; color: var(--muted);
-    }
-    .picker button {
-      width: 30px; height: 30px; border-radius: 50%;
-      border: 1px solid var(--border); background: var(--surface);
-      color: var(--text); font: inherit; font-size: 1rem; cursor: pointer;
-    }
-    .picker button:hover { border-color: rgba(255,255,255,0.22); }
-    .picker b { color: var(--text); font-size: 1.05rem; min-width: 2ch; display: inline-block; }
+    .lv:hover { border-color: rgba(255,255,255,0.25); color: var(--text); }
+    .lv.done { color: #7BC47F; border-color: rgba(58,143,114,0.55); }
+    .lv.on { background: var(--orange); border-color: var(--orange); color: var(--text); }
 
 
     .lines { display: grid; gap: 0.35rem; margin: 0 0 1.2rem; font-size: 0.88rem; }
@@ -214,11 +197,8 @@
 // ─────────────────────────────────────────────────
 //  SETTINGS
 // ─────────────────────────────────────────────────
-const TARGET      = 0.85;   // share of the field to claim
-const CAPTURE_MAX = 0.04;   // pens this small (or smaller) capture the sparks inside
-const FENCE_SPEED = 20;     // cells per second, per arm
 const MAX_HEARTS  = 5;
-const MAX_START   = 30;   // highest level the menu lets you jump to
+const LEVELS      = 30;   // clearing the last field wins the game
 
 const C = {
   bg:     '#1A1A2E',
@@ -239,6 +219,45 @@ const TYPES = {
   boulder: { name: 'Boulder', r: 0.62, speed: 6,  core: C.indigo, glow: C.purple },
   ghost:   { name: 'Ghost',   r: 0.42, speed: 8,  core: C.white,  glow: C.pink, ghost: true },
 };
+
+// ─────────────────────────────────────────────────
+//  LEVELS
+// ─────────────────────────────────────────────────
+// Every field has exactly three sparks. Difficulty comes from which sparks they are,
+// how fast they move, how slowly your fence grows, and how much you must claim.
+const TIERS = [
+  { name: 'Easy',   from: 1,  to: 6,  color: C.green },
+  { name: 'Medium', from: 7,  to: 12, color: C.yellow },
+  { name: 'Hard',   from: 13, to: 20, color: C.orange },
+  { name: 'Expert', from: 21, to: 30, color: C.pink },
+];
+const tierOf = n => TIERS.find(t => n >= t.from && n <= t.to) || TIERS[TIERS.length - 1];
+
+// [first field, spark mix]: tougher types replace embers as you climb.
+const MIXES = [
+  [1,  ['ember', 'ember', 'ember']],
+  [4,  ['ember', 'ember', 'dart']],
+  [7,  ['ember', 'dart', 'boulder']],
+  [9,  ['ember', 'boulder', 'ghost']],
+  [11, ['ember', 'dart', 'ghost']],
+  [13, ['dart', 'boulder', 'ghost']],
+  [17, ['dart', 'dart', 'ghost']],
+  [21, ['dart', 'ghost', 'ghost']],
+  [26, ['dart', 'dart', 'ghost']],
+];
+
+function levelSpec(n) {
+  const t = Math.min(1, (n - 1) / (LEVELS - 1));
+  let types = MIXES[0][1];
+  for (const [from, mix] of MIXES) if (n >= from) types = mix;
+  return {
+    types,
+    speed: 1 + 0.45 * t,                                  // spark speed multiplier
+    fence: 20 - 5 * t,                                    // fence growth, cells per second per arm
+    target: Math.round((0.75 + 0.15 * t) * 100) / 100,    // share of the field to claim
+    capture: 0.045 - 0.02 * t,                            // pens this small capture the sparks inside
+  };
+}
 
 // ─────────────────────────────────────────────────
 //  CANVAS
@@ -306,16 +325,10 @@ const sfx = {
 // ─────────────────────────────────────────────────
 //  STORAGE (best score; optional)
 // ─────────────────────────────────────────────────
-// Simple mode: identical sparks, click to build, no captures.
-let simple = false;
-try { simple = localStorage.getItem('corral-mode') === 'simple'; } catch {}
-function setMode(isSimple) {
-  simple = isSimple;
-  try { localStorage.setItem('corral-mode', simple ? 'simple' : 'corral'); } catch {}
-}
-const bestKey = () => simple ? 'corral-best-simple' : 'corral-best';
-function loadBest() { try { return +localStorage.getItem(bestKey()) || 0; } catch { return 0; } }
-function saveBest(v) { try { localStorage.setItem(bestKey(), String(v)); } catch {} }
+function loadBest() { try { return +localStorage.getItem('corral-best') || 0; } catch { return 0; } }
+function saveBest(v) { try { localStorage.setItem('corral-best', String(v)); } catch {} }
+function loadCleared() { try { return new Set(JSON.parse(localStorage.getItem('corral-cleared') || '[]')); } catch { return new Set(); } }
+function markCleared(n) { try { const c = loadCleared(); c.add(n); localStorage.setItem('corral-cleared', JSON.stringify([...c])); } catch {} }
 
 // ─────────────────────────────────────────────────
 //  GAME STATE
@@ -325,6 +338,7 @@ const G = {
   level: 1, score: 0, hearts: 3,
   cols: 0, rows: 0, grid: null, fillAt: null, interior: 0, filled: 0,
   sparks: [], fence: null, orient: 'h', floaters: [], levelStart: 0, clearInfo: null,
+  spec: levelSpec(1),
 };
 
 const idx = (x, y) => y * G.cols + x;
@@ -335,17 +349,6 @@ const rand = (a, b) => a + Math.random() * (b - a);
 function newGame(level = 1) {
   G.level = level; G.score = 0; G.hearts = 3;
   newLevel();
-}
-
-function sparkMix(level) {
-  if (simple) return Array(level + 1).fill('ember');
-  const list = ['ember', 'ember'];
-  if (level >= 2) list.push('dart');
-  if (level >= 3) list.push('boulder');
-  if (level >= 4) list.push('ghost');
-  const pool = level >= 4 ? ['ember', 'dart', 'boulder', 'ghost'] : ['ember', 'dart', 'boulder'];
-  while (list.length < level + 1) list.push(pool[Math.floor(Math.random() * pool.length)]);
-  return list.slice(0, level + 1);
 }
 
 function newLevel() {
@@ -361,10 +364,11 @@ function newLevel() {
   G.filled = 0;
   G.fence = null;
   G.floaters = [];
+  G.spec = levelSpec(G.level);
 
   // Sparks start spread out, heading diagonally (never straight along a wall).
-  const speedUp = 1 + Math.min(0.4, (G.level - 1) * 0.05);
-  G.sparks = sparkMix(G.level).map(type => {
+  const speedUp = G.spec.speed;
+  G.sparks = G.spec.types.map(type => {
     const t = TYPES[type];
     const angle = Math.PI / 4 + Math.floor(rand(0, 4)) * Math.PI / 2 + rand(-0.3, 0.3);
     const speed = t.speed * speedUp;
@@ -429,7 +433,7 @@ function updateFence(dt) {
 
   for (const arm of f.arms) {
     if (!arm.alive || arm.done) continue;
-    arm.acc += FENCE_SPEED * dt;
+    arm.acc += G.spec.fence * dt;
     while (arm.acc >= 1) {
       const nx = f.x + f.dx * arm.dir * (arm.n + 1);
       const ny = f.y + f.dy * arm.dir * (arm.n + 1);
@@ -504,7 +508,7 @@ function settle() {
 
   let claimed = 0, captured = 0;
   for (const r of regions) {
-    const small = !simple && r.cells.length <= CAPTURE_MAX * G.interior;
+    const small = r.cells.length <= G.spec.capture * G.interior;
     if (r.sparks.length && !small) continue;
     let n = 0, sx = 0, sy = 0;
     for (const [x, y] of r.cells) { if (setSolid(x, y)) n++; sx += x; sy += y; }
@@ -523,7 +527,7 @@ function settle() {
   if (captured) sfx.capture(); else sfx.seal();
   updateHUD();
 
-  if (G.filled / G.interior >= TARGET || G.sparks.length === 0) levelCleared();
+  if (G.filled / G.interior >= G.spec.target || G.sparks.length === 0) levelCleared();
 }
 
 // ─────────────────────────────────────────────────
@@ -580,6 +584,7 @@ function levelCleared() {
   const sweep = G.sparks.length === 0 ? 1000 * G.level : 0;
   G.clearInfo = { pct: Math.round(G.filled / G.interior * 100), secs, timeBonus, heartBonus, sweep };
   G.score += timeBonus + heartBonus + sweep;
+  markCleared(G.level);
   updateHUD();
   sfx.clear();
   setTimeout(showCleared, 700);
@@ -622,37 +627,25 @@ const dot = c => `<span class="dot" style="background:${c};box-shadow:0 0 8px ${
 function showMenu() {
   state = 'menu';
   const best = loadBest();
-  const rules = simple ? `
-      <div>${dot(C.yellow)}<span><b>Click or tap</b> to build a fence. <b>Right-click</b>, <b>space</b> or <b>↔ / ↕</b> flips its direction.</span></div>
-      <div>${dot(C.green)}<span>Pens with no sparks fill in. Claim <b>${Math.round(TARGET * 100)}%</b> to clear the field.</span></div>
-      <div>${dot(C.orange)}<span>Each field adds one more spark.</span></div>` : `
-      <div>${dot(C.yellow)}<span><b>Swipe or drag</b> to build a fence that way. A plain click or tap uses <b>↔ / ↕</b> (space or right-click flips it).</span></div>
-      <div>${dot(C.green)}<span>Pens with no sparks fill in. Claim <b>${Math.round(TARGET * 100)}%</b> to clear the field.</span></div>
-      <div>${dot(C.orange)}<span>Trap sparks in a <b>tiny pen</b> to corral them for big points.</span></div>
-      <div>${dot(C.pink)}<span>Ghosts slip through fences that are still growing.</span></div>`;
   showCard(`
     <h1>Cor<em>ral</em></h1>
     <p class="sub">Fence in the field. Don't let a spark touch your fence while it's building.</p>
-    <div class="modes">
-      <button class="mode ${simple ? '' : 'on'}" data-mode="corral">Corral</button>
-      <button class="mode ${simple ? 'on' : ''}" data-mode="simple">Simple</button>
+    <div class="rules">
+      <div>${dot(C.yellow)}<span><b>Swipe or drag</b> to build a fence that way. A plain click or tap uses <b>↔ / ↕</b> (space or right-click flips it).</span></div>
+      <div>${dot(C.green)}<span>Pens with no sparks fill in. Claim enough of the field to clear it.</span></div>
+      <div>${dot(C.orange)}<span>Trap sparks in a <b>tiny pen</b> to corral them for big points.</span></div>
+      <div>${dot(C.pink)}<span>Later fields bring faster sparks, slower fences and Ghosts that slip through growing fences.</span></div>
     </div>
-    <div class="rules">${rules}</div>
-    ${pickerHTML()}
-    <button class="btn">Play</button>
+    ${levelsHTML()}
+    <button class="btn">Play field ${pickedLevel}</button>
     <p class="hint">${best ? `Best <span class="best">${best.toLocaleString()}</span> · ` : ''}M to mute</p>
   `, () => newGame(pickedLevel));
-  wirePicker();
-  card.querySelectorAll('.mode').forEach(b => b.addEventListener('click', e => {
-    e.stopPropagation();
-    setMode(b.dataset.mode === 'simple');
-    newLevel();
-    showMenu();
-  }));
+  wireLevels();
 }
 
 function showCleared() {
   const i = G.clearInfo;
+  if (G.level >= LEVELS) return showWin();
   showCard(`
     <h1>Field <em>${G.level}</em> cleared</h1>
     <p class="sub">${i.sweep ? 'Every spark corralled!' : `${i.pct}% claimed in ${Math.round(i.secs)}s`}</p>
@@ -663,8 +656,22 @@ function showCleared() {
       <div class="total"><span>Score</span><span>${G.score.toLocaleString()}</span></div>
     </div>
     <button class="btn">Next field →</button>
-    <p class="hint">Field ${G.level + 1} adds a spark · +1 heart</p>
+    <p class="hint">Next: ${nextNote(G.level + 1)} · +1 heart</p>
   `, nextLevel);
+}
+
+function showWin() {
+  const best = loadBest(), isBest = G.score > best;
+  if (isBest) saveBest(G.score);
+  showCard(`
+    <h1>Every field <em>fenced</em></h1>
+    <p class="sub">All ${LEVELS} fields cleared. The sparks are yours.</p>
+    <div class="lines">
+      <div class="total"><span>Score</span><span>${G.score.toLocaleString()}</span></div>
+      <div><span>${isBest ? 'New best!' : 'Best'}</span><span class="best">${Math.max(best, G.score).toLocaleString()}</span></div>
+    </div>
+    <button class="btn">Back to fields</button>
+  `, () => { newLevel(); showMenu(); });
 }
 
 function showOver(isBest, best) {
@@ -676,38 +683,64 @@ function showOver(isBest, best) {
       <div><span>${isBest ? 'New best!' : 'Best'}</span><span class="best">${best.toLocaleString()}</span></div>
     </div>
     <button class="btn">Play again</button>
-    <p class="hint"><a href="#" id="to-menu">Change mode or level</a></p>
+    <p class="hint"><a href="#" id="to-menu">Pick a field</a></p>
   `, () => newGame(pickedLevel));
   card.querySelector('#to-menu').addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); newLevel(); showMenu(); });
 }
 
 // ─────────────────────────────────────────────────
-//  LEVEL PICKER (menu stepper; ?level=N in the URL preselects it)
+//  LEVEL PICKER (grid of fields by tier; ?level=N in the URL preselects it)
 // ─────────────────────────────────────────────────
-const clampLevel = n => Math.max(1, Math.min(MAX_START, Math.floor(+n) || 1));
+const clampLevel = n => Math.max(1, Math.min(LEVELS, Math.floor(+n) || 1));
 let pickedLevel = clampLevel(new URLSearchParams(location.search).get('level') || 1);
-const pickerHTML = () =>
-  `<div class="picker">Start at level <button data-step="-1" aria-label="Lower level">−</button><b id="picked">${pickedLevel}</b><button data-step="1" aria-label="Higher level">+</button></div>`;
-function wirePicker() {
-  card.querySelectorAll('.picker button').forEach(b => b.addEventListener('click', e => {
+
+function levelsHTML() {
+  const cleared = loadCleared();
+  return `<div class="levels">${TIERS.map(t => {
+    const btns = [];
+    for (let n = t.from; n <= t.to; n++) {
+      const cls = ['lv', cleared.has(n) && 'done', n === pickedLevel && 'on'].filter(Boolean).join(' ');
+      btns.push(`<button class="${cls}" data-lv="${n}" aria-label="Field ${n}${cleared.has(n) ? ', cleared' : ''}">${n}</button>`);
+    }
+    return `<div><div class="tier-name" style="color:${t.color}">${t.name.toUpperCase()}</div><div class="tier-lv">${btns.join('')}</div></div>`;
+  }).join('')}</div>`;
+}
+
+function wireLevels() {
+  card.querySelectorAll('.lv').forEach(b => b.addEventListener('click', e => {
     e.stopPropagation();
-    pickedLevel = clampLevel(pickedLevel + +b.dataset.step);
-    card.querySelector('#picked').textContent = pickedLevel;
+    pickedLevel = +b.dataset.lv;
+    card.querySelectorAll('.lv').forEach(x => x.classList.toggle('on', x === b));
+    card.querySelector('.btn').textContent = `Play field ${pickedLevel}`;
   }));
+}
+
+/** One line about what the next field changes. */
+function nextNote(n) {
+  const a = levelSpec(n - 1), b = levelSpec(n);
+  const added = [...new Set(b.types.filter(t => !a.types.includes(t)))];
+  const seen = new Set();
+  for (let k = 1; k < n; k++) levelSpec(k).types.forEach(t => seen.add(t));
+  const tier = tierOf(n), prevTier = tierOf(n - 1);
+  const parts = [];
+  if (tier.name !== prevTier.name) parts.push(`${tier.name} tier`);
+  for (const t of added) parts.push(`${TYPES[t].name} ${seen.has(t) ? 'returns' : 'joins'}`);
+  parts.push(`claim ${Math.round(b.target * 100)}%`);
+  return `field ${n} · ${parts.join(' · ')}`;
 }
 
 // ─────────────────────────────────────────────────
 //  HUD
 // ─────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
-$('target').style.left = `calc(${TARGET * 100}% - 1px)`;
 
 function updateHUD() {
   const pct = G.interior ? G.filled / G.interior : 0;
   $('level').textContent = G.level;
   $('pct').textContent = Math.round(pct * 100) + '%';
   $('bar').style.width = Math.min(100, pct * 100) + '%';
-  $('bar').style.background = pct >= TARGET ? C.yellow : C.green;
+  $('target').style.left = `calc(${G.spec.target * 100}% - 1px)`;
+  $('bar').style.background = pct >= G.spec.target ? C.yellow : C.green;
   $('score').textContent = G.score.toLocaleString();
   $('hearts').textContent = '♥'.repeat(Math.max(0, G.hearts)) || '–';
   $('orient').textContent = G.orient === 'h' ? '↔' : '↕';
@@ -753,7 +786,7 @@ canvas.addEventListener('pointerup', e => {
   if (!pointer || pointer.id !== e.pointerId) return;
   const p = pointer;
   pointer = null;
-  const swiped = simple ? null : dragOrient(p, e.clientX, e.clientY);
+  const swiped = dragOrient(p, e.clientX, e.clientY);
   if (swiped) { G.orient = swiped; updateHUD(); }
   const [cx, cy] = toCell(p.x, p.y);
   startFence(cx, cy, G.orient);
@@ -827,7 +860,7 @@ function drawPreview() {
   let src = null, orient = G.orient;
   if (pointer) {
     src = pointer;
-    if (pointer.cur && !simple) orient = dragOrient(pointer, pointer.cur.x, pointer.cur.y) || G.orient;
+    if (pointer.cur) orient = dragOrient(pointer, pointer.cur.x, pointer.cur.y) || G.orient;
   } else if (hover) {
     src = hover;
   }
