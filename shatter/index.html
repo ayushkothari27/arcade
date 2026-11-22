@@ -365,7 +365,7 @@ const G = {
   shield: false, shake: 0, banner: null, clearAt: 0,
 };
 
-const ballSpeed = () => 330 * (1 + Math.min(0.5, (G.level - 1) * 0.03)) * (G.fx.slow > 0 ? 0.68 : 1);
+const ballSpeed = () => 280 * (1 + Math.min(0.4, (G.level - 1) * 0.025)) * (G.fx.slow > 0 ? 0.68 : 1);
 
 function newGame(level = 1) {
   G.level = level; G.score = 0; G.lives = 3;
